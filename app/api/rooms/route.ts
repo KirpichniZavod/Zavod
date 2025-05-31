@@ -182,7 +182,7 @@ function assignRoles(playerIds: string[], playerCount: number): Record<string, R
   return roles
 }
 
-// Запуск игры
+// Исправляем функцию startGame, чтобы она правильно обрабатывала игроков
 function startGame(roomId: string) {
   const room = rooms.get(roomId)
   if (!room || room.status !== "waiting") return
@@ -201,7 +201,23 @@ function startGame(roomId: string) {
     }
   })
 
-  // Создаем начальное состояние игры
+  // Создаем начальное состояние игры с правильными игроками
+  const gamePlayers = room.players
+    .map((playerId) => {
+      const player = players.get(playerId)
+      return player
+        ? {
+            id: player.id,
+            name: player.name,
+            role: player.role || "civilian",
+            isAlive: player.isAlive,
+            isHost: player.isHost,
+            isConnected: Date.now() - player.lastSeen < 10000,
+          }
+        : null
+    })
+    .filter(Boolean)
+
   room.gameState = {
     phase: "day",
     day: 1,
@@ -216,6 +232,7 @@ function startGame(roomId: string) {
     sheriffChecked: null,
     loverTarget: null,
     seducedPlayer: null,
+    players: gamePlayers, // Добавляем игроков в состояние игры
     messages: [
       {
         id: `system-${Date.now()}`,
@@ -244,7 +261,7 @@ function startGame(roomId: string) {
   console.log(`✅ Game started in room ${roomId} with ${room.players.length} players`)
 }
 
-// Проверка автозапуска
+// Исправляем функцию checkAutoStart, чтобы таймер работал стабильно
 function checkAutoStart(roomId: string) {
   const room = rooms.get(roomId)
   if (!room || room.status !== "waiting") return
@@ -265,6 +282,25 @@ function checkAutoStart(roomId: string) {
     })
 
     console.log(`⏰ Auto-start timer started for room ${roomId}`)
+
+    // Запускаем таймер с интервалом
+    const timerId = setInterval(() => {
+      const currentRoom = rooms.get(roomId)
+      if (!currentRoom || currentRoom.status !== "waiting") {
+        clearInterval(timerId)
+        return
+      }
+
+      const elapsed = Math.floor((Date.now() - (currentRoom.autoStartTimestamp || now)) / 1000)
+      const remaining = Math.max(0, 15 - elapsed)
+
+      currentRoom.autoStartTimer = remaining
+
+      if (remaining <= 0) {
+        clearInterval(timerId)
+        startGame(roomId)
+      }
+    }, 1000)
   }
   // Если недостаточно игроков и таймер запущен
   else if (room.players.length < room.minPlayers && room.autoStartTimer) {
@@ -280,18 +316,6 @@ function checkAutoStart(roomId: string) {
     })
 
     console.log(`❌ Auto-start timer cancelled for room ${roomId}`)
-  }
-  // Обновляем таймер
-  else if (room.autoStartTimer && room.autoStartTimestamp) {
-    const elapsed = Math.floor((now - room.autoStartTimestamp) / 1000)
-    const remaining = Math.max(0, 15 - elapsed)
-
-    if (remaining <= 0) {
-      // Запускаем игру
-      startGame(roomId)
-    } else {
-      room.autoStartTimer = remaining
-    }
   }
 }
 

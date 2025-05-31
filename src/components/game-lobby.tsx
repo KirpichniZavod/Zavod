@@ -127,31 +127,53 @@ const GameLobby: React.FC<GameLobbyProps> = ({ onGameStart, onLeaveRoom }) => {
 
         setError("")
 
+        // Исправляем логику перехода к игре, чтобы не перезаписывать игроков
         // Если игра началась, переходим к игре
         if (data.data.roomInfo.status === "playing" && data.data.gameState) {
           console.log("🎮 Game started! Transitioning to game...")
 
-          // Обновляем состояние игры
+          // Обновляем состояние игры БЕЗ перезаписи игроков
           setState((prevState) => ({
             ...prevState,
-            ...data.data.gameState,
+            // Копируем состояние игры с сервера
+            phase: data.data.gameState.phase || "day",
+            day: data.data.gameState.day || 1,
+            timer: data.data.gameState.timer || 30,
+            messages: data.data.gameState.messages || [],
+            // НЕ перезаписываем игроков, а обновляем их роли
+            players:
+              prevState.players.length > 0
+                ? prevState.players.map((player) => {
+                    const serverPlayer = data.data.players.find((p: Player) => p.id === player.id)
+                    if (serverPlayer) {
+                      return {
+                        ...player,
+                        role: serverPlayer.role || player.role,
+                        isAlive: serverPlayer.isAlive !== undefined ? serverPlayer.isAlive : player.isAlive,
+                        isConnected:
+                          serverPlayer.isConnected !== undefined ? serverPlayer.isConnected : player.isConnected,
+                      }
+                    }
+                    return player
+                  })
+                : // Если локальных игроков нет, используем серверных
+                  data.data.players.map((p: Player) => ({
+                    id: p.id,
+                    name: p.name,
+                    role: p.role || "civilian",
+                    isAlive: p.isAlive,
+                    isBot: false,
+                    avatar: "",
+                    isHost: p.isHost,
+                    clientId: p.id,
+                    isSeduced: false,
+                    canVote: true,
+                    canUseAbility: true,
+                    isConnected: p.isConnected,
+                  })),
             isOnline: true,
             roomId: roomId,
             clientId: playerId,
-            players: data.data.players.map((p: Player) => ({
-              id: p.id,
-              name: p.name,
-              role: p.role || "civilian",
-              isAlive: p.isAlive,
-              isBot: false,
-              avatar: "",
-              isHost: p.isHost,
-              clientId: p.id,
-              isSeduced: false,
-              canVote: true,
-              canUseAbility: true,
-              isConnected: p.isConnected,
-            })),
           }))
 
           onGameStart()

@@ -18,6 +18,7 @@ interface User {
   createdAt: number
   stats: UserStats
   favoriteRole?: string
+  isAdmin?: boolean // Добавляем флаг админа
 }
 
 interface AuthContextType {
@@ -53,6 +54,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             winRate: 0,
           }
         }
+
+        // Проверяем админские права
+        userData.isAdmin = userData.nickname === "Udav"
 
         setUser(userData)
         setIsAuthenticated(true)
@@ -109,6 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           winRate: 0,
         },
         favoriteRole: "Мирный",
+        isAdmin: nickname === "Udav", // Проверяем админские права
       }
 
       // Сохраняем пользователя в "базе данных"
@@ -169,6 +174,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: foundUser.createdAt,
         stats: foundUser.stats,
         favoriteRole: foundUser.favoriteRole || "Мирный",
+        isAdmin: foundUser.nickname === "Udav", // Проверяем админские права
       }
 
       safeLocalStorage.setItem("mafia_user", JSON.stringify(userData))
@@ -217,7 +223,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Имитируем запрос к серверу
       await new Promise((resolve) => setTimeout(resolve, 500))
 
-      const updatedUser = { ...user, ...updates }
+      const updatedUser = {
+        ...user,
+        ...updates,
+        // Обновляем админские права если изменился никнейм
+        isAdmin: (updates.nickname || user.nickname) === "Udav",
+      }
 
       // Обновляем в списке пользователей
       const existingUsers = safeLocalStorage.getItem("mafia_users")

@@ -6,12 +6,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "./auth-context"
 
 interface GameSetupProps {
-  onGameStart: () => void
   onShowOnline: () => void
   onShowProfile: () => void
 }
 
-export const GameSetup: React.FC<GameSetupProps> = ({ onGameStart, onShowOnline, onShowProfile }) => {
+export const GameSetup: React.FC<GameSetupProps> = ({ onShowOnline, onShowProfile }) => {
   const { user } = useAuth()
 
   return (
@@ -26,17 +25,10 @@ export const GameSetup: React.FC<GameSetupProps> = ({ onGameStart, onShowOnline,
 
           <div className="space-y-4">
             <Button
-              onClick={onGameStart}
-              className="w-full h-14 text-lg bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600"
-            >
-              Локальная игра
-            </Button>
-
-            <Button
               onClick={onShowOnline}
               className="w-full h-14 text-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600"
             >
-              Онлайн игра
+              Играть онлайн
             </Button>
 
             <Button
@@ -48,7 +40,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({ onGameStart, onShowOnline,
           </div>
 
           <div className="text-center text-gray-400 text-sm">
-            <p>Версия 1.0.0</p>
+            <p>Версия 2.0.0</p>
           </div>
         </CardContent>
       </Card>

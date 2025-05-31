@@ -17,6 +17,8 @@ import {
   Divider,
 } from "@heroui/react"
 import { useGame } from "./game-context"
+import { useAuth } from "./auth-context"
+import { AdminPanel } from "./admin-panel"
 
 // Иконки остаются теми же...
 const UserIcon = () => (
@@ -143,6 +145,16 @@ const ExitIcon = () => (
   </svg>
 )
 
+const AdminIcon = () => (
+  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+    <path
+      fillRule="evenodd"
+      d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+      clipRule="evenodd"
+    />
+  </svg>
+)
+
 interface GameBoardProps {
   onLeaveRoom: () => void
 }
@@ -161,15 +173,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
     donCheck,
     setState,
   } = useGame()
+  const { user } = useAuth()
   const [message, setMessage] = React.useState("")
   const [activeChat, setActiveChat] = React.useState<"public" | "mafia">("public")
+  const [showAdminPanel, setShowAdminPanel] = React.useState(false)
   const chatRef = React.useRef<HTMLDivElement>(null)
   const mafiaRef = React.useRef<HTMLDivElement>(null)
   const { isOpen, onOpen, onOpenChange } = useDisclosure()
-
-  // Добавим кнопку для обновления состояния игры в онлайн-режиме
-  // Найдем место в компоненте, где отображается информация о фазе игры
-  // и добавим кнопку обновления для онлайн-режима
 
   // В начале компонента добавим состояние для отслеживания обновлений
   const [isUpdating, setIsUpdating] = React.useState(false)
@@ -453,26 +463,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
   // Проверка, мертв ли игрок
   const isPlayerDead = !currentPlayer?.isAlive
 
-  // Функция для получения класса роли для тестового режима
-  const getRoleClass = (role: string): string => {
-    switch (role) {
-      case "civilian":
-        return "bg-primary-900/50 text-primary-200"
-      case "mafia":
-        return "bg-danger-900/50 text-danger-200"
-      case "sheriff":
-        return "bg-warning-900/50 text-warning-200"
-      case "doctor":
-        return "bg-success-900/50 text-success-200"
-      case "lover":
-        return "bg-secondary-900/50 text-secondary-200"
-      case "don":
-        return "bg-danger-900/50 text-danger-200"
-      default:
-        return "bg-gray-900/50 text-gray-200"
-    }
-  }
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {/* Левая колонка - информация об игре */}
@@ -531,6 +521,20 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
               startContent={<ExitIcon />}
             >
               Выйти из комнаты
+            </Button>
+          )}
+
+          {/* Админ панель */}
+          {user?.isAdmin && (
+            <Button
+              color="warning"
+              variant="flat"
+              size="sm"
+              className="mt-3 w-full"
+              onPress={() => setShowAdminPanel(true)}
+              startContent={<AdminIcon />}
+            >
+              Админ панель
             </Button>
           )}
 
@@ -789,12 +793,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                             Исключен
                           </Badge>
                         )}
-                        {/* Показываем роль в тестовом режиме */}
-                        {state.testMode && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${getRoleClass(player.role)}`}>
-                            {getRoleName(player.role)}
-                          </span>
-                        )}
                       </div>
                       <div className="flex items-center gap-1 text-xs text-gray-400">
                         {!isAlive && state.phase !== "last-word" && <span className="text-red-400">Мёртв</span>}
@@ -1018,6 +1016,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
           )}
         </ModalContent>
       </Modal>
+
+      {/* Админ панель */}
+      {showAdminPanel && <AdminPanel onClose={() => setShowAdminPanel(false)} />}
     </div>
   )
 }

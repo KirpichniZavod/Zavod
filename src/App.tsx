@@ -17,7 +17,6 @@ function AppContent() {
   const { state } = useGame()
   const { user, isAuthenticated } = useAuth()
   const [currentScreen, setCurrentScreen] = React.useState<"menu" | "online" | "lobby" | "game" | "profile">("menu")
-  const [isLoading, setIsLoading] = React.useState(false)
 
   // Проверяем сохраненную сессию только если пользователь авторизован
   React.useEffect(() => {
@@ -35,7 +34,7 @@ function AppContent() {
 
   // Отслеживаем изменения фазы игры
   React.useEffect(() => {
-    if (state.phase !== "setup" && state.players.length > 0) {
+    if (state.phase !== "setup" && state.phase !== "lobby" && state.players.length > 0) {
       setCurrentScreen("game")
     }
   }, [state.phase, state.players])
@@ -95,7 +94,7 @@ function AppContent() {
           <GameBoard onLeaveRoom={handleLeaveRoom} />
         </div>
       ) : (
-        <GameSetup onGameStart={handleGameStart} onShowOnline={handleShowOnline} onShowProfile={handleShowProfile} />
+        <GameSetup onShowOnline={handleShowOnline} onShowProfile={handleShowProfile} />
       )}
     </div>
   )
