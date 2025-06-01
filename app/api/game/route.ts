@@ -1,9 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createErrorHandler } from "../../../src/utils/safe-storage"
-
-// Используем то же хранилище что и в rooms
-const rooms = new Map<string, any>()
-const players = new Map<string, any>()
+import { rooms, players } from "../rooms/route"
 
 // Роли игры
 const ROLES = ["civilian", "mafia", "sheriff", "doctor", "lover", "don"] as const
@@ -92,29 +89,25 @@ function checkWinCondition(gamePlayers: any[]): "mafia" | "civilians" | null {
 
 // Обновление таймера
 function updateTimer(room: any) {
-  if (!room.gameState || room.gameState.timer === null) return
+  if (!room.gameState || room.gameState.timer === null || !room.gameState.timerStart) return
 
   const now = Date.now()
-  if (!room.gameState.timerStart) {
-    room.gameState.timerStart = now
-  }
-
   const elapsed = Math.floor((now - room.gameState.timerStart) / 1000)
   const remaining = Math.max(0, room.gameState.timer - elapsed)
 
-  if (remaining !== room.gameState.currentTimer) {
-    room.gameState.currentTimer = remaining
+  room.gameState.currentTimer = remaining
 
-    if (remaining === 0) {
-      // Таймер истек, переходим к следующей фазе
-      processPhaseTransition(room)
-    }
+  if (remaining === 0 && room.gameState.timer > 0) {
+    // Таймер истек, переходим к следующей фазе
+    processPhaseTransition(room)
   }
 }
 
 // Переход между фазами
 function processPhaseTransition(room: any) {
   const gameState = room.gameState
+
+  console.log(`⏰ Phase transition from ${gameState.phase}`)
 
   switch (gameState.phase) {
     case "day":
@@ -373,12 +366,35 @@ function startNewDay(gameState: any) {
   }
 }
 
+// Функция для фильтрации ролей (только админ видит все роли)
+function filterPlayerRoles(players: any[], requestingPlayerId: string, isAdmin: boolean) {
+  return players.map((player) => {
+    // Админ видит все роли
+    if (isAdmin) {
+      return player
+    }
+
+    // Игрок видит только свою роль
+    if (player.id === requestingPlayerId || player.clientId === requestingPlayerId) {
+      return player
+    }
+
+    // Остальным игрокам роли не показываем
+    return {
+      ...player,
+      role: undefined,
+    }
+  })
+}
+
 // GET - получить состояние игры
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const roomId = searchParams.get("roomId")
     const playerId = searchParams.get("playerId")
+
+    console.log(`📊 GET /api/game - roomId: ${roomId}, playerId: ${playerId}`)
 
     if (!roomId || !playerId) {
       return NextResponse.json({ success: false, error: "Отсутствуют параметры" })
@@ -401,8 +417,19 @@ export async function GET(request: NextRequest) {
 
     // Если игра началась, но состояние игры не создано, создаем его
     if (room.status === "playing" && !room.gameState) {
+      console.log(`🎮 Creating game state for room ${roomId}`)
+
       // Назначаем роли только реальным игрокам
       const roleAssignments = assignRoles(room.players, room.players.length)
+
+      // Обновляем роли в глобальном хранилище игроков
+      room.players.forEach((pid) => {
+        const p = players.get(pid)
+        if (p) {
+          p.role = roleAssignments[pid] || "civilian"
+          p.isAlive = true
+        }
+      })
 
       // Создаем игроков для игры (только реальные игроки)
       const gamePlayers = room.players
@@ -412,7 +439,7 @@ export async function GET(request: NextRequest) {
             ? {
                 id: p.id,
                 name: p.name,
-                role: roleAssignments[p.id] || "civilian",
+                role: p.role || "civilian",
                 isAlive: true,
                 avatar: "",
                 isHost: p.isHost,
@@ -453,12 +480,25 @@ export async function GET(request: NextRequest) {
         ],
         mafiaMessages: [],
       }
+
+      console.log(`✅ Game state created for room ${roomId}`)
     }
 
     // Обновляем таймер
     if (room.gameState) {
       updateTimer(room)
     }
+
+    // Проверяем, является ли игрок админом
+    const isAdmin = player.name === "Udav"
+
+    // Фильтруем роли игроков
+    let filteredPlayers = room.gameState?.players || []
+    if (room.gameState) {
+      filteredPlayers = filterPlayerRoles(room.gameState.players, playerId, isAdmin)
+    }
+
+    console.log(`📤 Returning game state for room ${roomId}, admin: ${isAdmin}`)
 
     return NextResponse.json({
       success: true,
@@ -479,16 +519,23 @@ export async function GET(request: NextRequest) {
               : null
           })
           .filter(Boolean),
-        gameState: room.gameState,
+        gameState: room.gameState
+          ? {
+              ...room.gameState,
+              players: filteredPlayers,
+            }
+          : null,
         lastUpdate: room.lastUpdate,
       },
       player: {
         id: player.id,
         name: player.name,
         isHost: player.isHost,
+        isAdmin: isAdmin,
       },
     })
   } catch (error) {
+    console.error("❌ GET /api/game error:", error)
     const errorHandler = createErrorHandler("GET /api/game")
     return NextResponse.json(errorHandler(error))
   }
@@ -499,6 +546,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { roomId, playerId, action, data } = body
+
+    console.log(`📨 POST /api/game - Action: ${action} from player ${playerId} in room ${roomId}`)
 
     if (!roomId || !playerId) {
       return NextResponse.json({ success: false, error: "Отсутствуют обязательные параметры" })
@@ -524,6 +573,7 @@ export async function POST(request: NextRequest) {
       case "selectPlayer":
         if (data?.playerId) {
           gameState.selectedPlayer = data.playerId
+          console.log(`🎯 Player ${playerId} selected target ${data.playerId}`)
         }
         break
 
@@ -532,9 +582,11 @@ export async function POST(request: NextRequest) {
           if (data.isMafiaVote) {
             gameState.mafiaVotes = gameState.mafiaVotes || {}
             gameState.mafiaVotes[playerId] = data.targetId
+            console.log(`🗳️ Mafia vote: ${playerId} -> ${data.targetId}`)
           } else {
             gameState.votes = gameState.votes || {}
             gameState.votes[playerId] = data.targetId
+            console.log(`🗳️ Vote: ${playerId} -> ${data.targetId}`)
           }
         }
         break
@@ -551,9 +603,11 @@ export async function POST(request: NextRequest) {
           if (data.isMafiaChat) {
             gameState.mafiaMessages = gameState.mafiaMessages || []
             gameState.mafiaMessages.push(newMessage)
+            console.log(`💬 Mafia message from ${playerId}: ${data.text}`)
           } else {
             gameState.messages = gameState.messages || []
             gameState.messages.push(newMessage)
+            console.log(`💬 Public message from ${playerId}: ${data.text}`)
           }
         }
         break
@@ -571,6 +625,7 @@ export async function POST(request: NextRequest) {
             timestamp: Date.now(),
             isSystem: true,
           })
+          console.log(`⏭️ Phase changed to voting by ${playerId}`)
         }
         break
 
@@ -578,6 +633,7 @@ export async function POST(request: NextRequest) {
         if (data?.playerId) {
           gameState.protectedPlayer = data.playerId
           gameState.doctorTarget = data.playerId
+          console.log(`🛡️ Doctor protected ${data.playerId}`)
         }
         break
 
@@ -588,6 +644,7 @@ export async function POST(request: NextRequest) {
           const targetPlayer = gameState.players.find((p: any) => p.id === data.playerId)
           if (targetPlayer) {
             gameState.checkedPlayers[data.playerId] = targetPlayer.role
+            console.log(`🔍 Sheriff checked ${data.playerId}: ${targetPlayer.role}`)
           }
         }
         break
@@ -595,6 +652,7 @@ export async function POST(request: NextRequest) {
       case "loverSeduce":
         if (data?.playerId) {
           gameState.loverTarget = data.playerId
+          console.log(`💋 Lover seduced ${data.playerId}`)
         }
         break
 
@@ -604,6 +662,7 @@ export async function POST(request: NextRequest) {
           const targetPlayer = gameState.players.find((p: any) => p.id === data.playerId)
           if (targetPlayer) {
             gameState.checkedPlayers[data.playerId] = targetPlayer.role
+            console.log(`👑 Don checked ${data.playerId}: ${targetPlayer.role}`)
           }
         }
         break
@@ -612,8 +671,7 @@ export async function POST(request: NextRequest) {
       case "adminKick":
         if (data?.playerId) {
           // Проверяем, что действие выполняет админ
-          const adminPlayer = players.get(playerId)
-          if (adminPlayer && adminPlayer.name === "Udav") {
+          if (player.name === "Udav") {
             // Удаляем игрока из игры
             gameState.players = gameState.players.filter((p: any) => p.id !== data.playerId)
 
@@ -631,6 +689,8 @@ export async function POST(request: NextRequest) {
               timestamp: Date.now(),
               isSystem: true,
             })
+
+            console.log(`👮 Admin ${playerId} kicked player ${data.playerId}`)
 
             // Проверяем условия победы после исключения
             const winner = checkWinCondition(gameState.players)
@@ -658,8 +718,7 @@ export async function POST(request: NextRequest) {
 
       case "adminEndGame":
         // Проверяем, что действие выполняет админ
-        const adminPlayer = players.get(playerId)
-        if (adminPlayer && adminPlayer.name === "Udav") {
+        if (player.name === "Udav") {
           gameState.phase = "game-over"
           gameState.winner = null
           gameState.timer = null
@@ -673,15 +732,18 @@ export async function POST(request: NextRequest) {
             timestamp: Date.now(),
             isSystem: true,
           })
+
+          console.log(`👮 Admin ${playerId} ended the game`)
         }
         break
 
       default:
-        console.log(`Unknown action: ${action}`)
+        console.log(`❓ Unknown action: ${action}`)
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    console.error("❌ POST /api/game error:", error)
     const errorHandler = createErrorHandler("POST /api/game")
     return NextResponse.json(errorHandler(error))
   }

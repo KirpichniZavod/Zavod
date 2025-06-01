@@ -46,6 +46,8 @@ interface GameState {
     | "game-over"
   day: number
   timer: number | null
+  timerStart: number | null
+  currentTimer: number | null
   votes: Record<string, string>
   selectedPlayer: string | null
   eliminatedPlayer: { id: string; name: string; role: string } | null
@@ -58,6 +60,7 @@ interface GameState {
   seducedPlayer: string | null
   messages: GameMessage[]
   mafiaMessages: GameMessage[]
+  players: any[]
 }
 
 interface GameMessage {
@@ -213,6 +216,11 @@ function startGame(roomId: string) {
             isAlive: player.isAlive,
             isHost: player.isHost,
             isConnected: Date.now() - player.lastSeen < 10000,
+            avatar: "",
+            clientId: player.id,
+            isSeduced: false,
+            canVote: true,
+            canUseAbility: true,
           }
         : null
     })
@@ -222,6 +230,8 @@ function startGame(roomId: string) {
     phase: "day",
     day: 1,
     timer: 30,
+    timerStart: Date.now(),
+    currentTimer: 30,
     votes: {},
     selectedPlayer: null,
     eliminatedPlayer: null,
@@ -232,7 +242,7 @@ function startGame(roomId: string) {
     sheriffChecked: null,
     loverTarget: null,
     seducedPlayer: null,
-    players: gamePlayers, // Добавляем игроков в состояние игры
+    players: gamePlayers,
     messages: [
       {
         id: `system-${Date.now()}`,
@@ -674,3 +684,6 @@ export function addChatMessage(roomId: string, sender: string, message: string) 
   console.log(`💬 Added chat message in room ${roomId}: ${sender}: ${message}`)
   return true
 }
+
+// Экспортируем хранилища для использования в game API
+export { rooms, players }

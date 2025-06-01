@@ -820,10 +820,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                               Исключен
                             </Badge>
                           )}
-                          {/* Показываем роль яркими цветами */}
-                          <span className={`text-xs px-2 py-0.5 rounded ${getBrightRoleColor(player.role)}`}>
-                            {getRoleName(player.role)}
-                          </span>
+                          {/* Показываем роль только если она определена (админ или сам игрок) */}
+                          {player.role && (
+                            <span className={`text-xs px-2 py-0.5 rounded ${getBrightRoleColor(player.role)}`}>
+                              {getRoleName(player.role)}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 text-xs text-gray-400">
                           {!isAlive && state.phase !== "last-word" && <span className="text-red-400">Мёртв</span>}
