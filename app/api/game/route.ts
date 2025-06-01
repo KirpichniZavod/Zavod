@@ -87,7 +87,7 @@ function checkWinCondition(gamePlayers: any[]): "mafia" | "civilians" | null {
   return null
 }
 
-// Обновление таймера
+// Обновление таймера - ИСПРАВЛЕНО для стабильной работы
 function updateTimer(room: any) {
   if (!room.gameState || room.gameState.timer === null || !room.gameState.timerStart) return
 
@@ -95,11 +95,14 @@ function updateTimer(room: any) {
   const elapsed = Math.floor((now - room.gameState.timerStart) / 1000)
   const remaining = Math.max(0, room.gameState.timer - elapsed)
 
-  room.gameState.currentTimer = remaining
+  // Обновляем currentTimer только если значение изменилось
+  if (room.gameState.currentTimer !== remaining) {
+    room.gameState.currentTimer = remaining
 
-  if (remaining === 0 && room.gameState.timer > 0) {
-    // Таймер истек, переходим к следующей фазе
-    processPhaseTransition(room)
+    // Если таймер истек, переходим к следующей фазе
+    if (remaining === 0 && room.gameState.timer > 0) {
+      processPhaseTransition(room)
+    }
   }
 }
 
@@ -394,8 +397,6 @@ export async function GET(request: NextRequest) {
     const roomId = searchParams.get("roomId")
     const playerId = searchParams.get("playerId")
 
-    console.log(`📊 GET /api/game - roomId: ${roomId}, playerId: ${playerId}`)
-
     if (!roomId || !playerId) {
       return NextResponse.json({ success: false, error: "Отсутствуют параметры" })
     }
@@ -497,8 +498,6 @@ export async function GET(request: NextRequest) {
     if (room.gameState) {
       filteredPlayers = filterPlayerRoles(room.gameState.players, playerId, isAdmin)
     }
-
-    console.log(`📤 Returning game state for room ${roomId}, admin: ${isAdmin}`)
 
     return NextResponse.json({
       success: true,

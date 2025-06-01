@@ -181,14 +181,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
   const mafiaRef = React.useRef<HTMLDivElement>(null)
   const { isOpen, onOpen, onOpenChange } = useDisclosure()
 
-  // В начале компонента добавим состояние для отслеживания обновлений
-  const [isUpdating, setIsUpdating] = React.useState(false)
+  // Состояние для стабильного таймера
+  const [localTimer, setLocalTimer] = React.useState<number | null>(null)
+  const [lastTimerUpdate, setLastTimerUpdate] = React.useState<number>(0)
 
   // Добавим функцию для обновления состояния игры
   const updateGameState = async () => {
     if (!state.isOnline) return
 
-    setIsUpdating(true)
     try {
       const response = await fetch(`/api/game?roomId=${state.roomId}&playerId=${state.clientId}`)
       const data = await response.json()
@@ -198,25 +198,44 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
         setState((prev) => ({
           ...prev,
           ...data.room.gameState,
-          // Используем currentTimer вместо timer для отображения
+          // Используем currentTimer для стабильного отображения
           timer: data.room.gameState.currentTimer,
-          // Принудительно обновляем игроков
           players: data.room.gameState.players || prev.players,
         }))
+
+        // Обновляем локальный таймер только если получили новое значение
+        if (data.room.gameState.currentTimer !== null && data.room.gameState.currentTimer !== localTimer) {
+          setLocalTimer(data.room.gameState.currentTimer)
+          setLastTimerUpdate(Date.now())
+        }
       }
     } catch (error) {
       console.error("Ошибка обновления состояния игры:", error)
-    } finally {
-      setIsUpdating(false)
     }
   }
 
-  // Добавляем автоматическую синхронизацию каждую секунду
+  // Локальный таймер для плавного отсчета
+  React.useEffect(() => {
+    if (localTimer === null || localTimer <= 0) return
+
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - lastTimerUpdate) / 1000)
+      const newTimer = Math.max(0, localTimer - elapsed)
+
+      if (newTimer !== localTimer) {
+        setLocalTimer(newTimer)
+      }
+    }, 100) // Обновляем каждые 100мс для плавности
+
+    return () => clearInterval(interval)
+  }, [localTimer, lastTimerUpdate])
+
+  // Синхронизация с сервером каждые 2 секунды
   React.useEffect(() => {
     if (state.isOnline) {
       const syncInterval = setInterval(() => {
         updateGameState()
-      }, 1000)
+      }, 2000) // Увеличили интервал до 2 секунд
 
       return () => clearInterval(syncInterval)
     }
@@ -242,55 +261,61 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
 
   // Получение информации о текущей фазе
   const getPhaseInfo = (): { title: string; description: string } => {
+    const displayTimer = localTimer !== null ? localTimer : state.timer
+
     switch (state.phase) {
       case "day":
         return {
           title: `День ${state.day}`,
           description:
-            state.timer !== null
-              ? `Обсудите, кто может быть мафией. Осталось: ${state.timer} сек.`
+            displayTimer !== null
+              ? `Обсудите, кто может быть мафией. Осталось: ${displayTimer} сек.`
               : "Обсудите, кто может быть мафией.",
         }
       case "voting":
         return {
           title: "Голосование",
           description:
-            state.timer !== null
-              ? `Выберите, кого вы считаете мафией. Осталось: ${state.timer} сек.`
+            displayTimer !== null
+              ? `Выберите, кого вы считаете мафией. Осталось: ${displayTimer} сек.`
               : "Выберите, кого вы считаете мафией.",
         }
       case "last-word":
         return {
           title: "Последнее слово",
           description:
-            state.timer !== null
-              ? `${state.eliminatedPlayer?.name} может сказать последнее слово. Осталось: ${state.timer} сек.`
+            displayTimer !== null
+              ? `${state.eliminatedPlayer?.name} может сказать последнее слово. Осталось: ${displayTimer} сек.`
               : `${state.eliminatedPlayer?.name} говорит последнее слово.`,
         }
       case "mafia-turn":
         return {
           title: "Ход мафии",
           description:
-            state.timer !== null ? `Мафия выбирает жертву. Осталось: ${state.timer} сек.` : "Мафия выбирает жертву.",
+            displayTimer !== null ? `Мафия выбирает жертву. Осталось: ${displayTimer} сек.` : "Мафия выбирает жертву.",
         }
       case "sheriff-turn":
         return {
           title: "Ход шерифа",
           description:
-            state.timer !== null ? `Шериф проверяет игрока. Осталось: ${state.timer} сек.` : "Шериф проверяет игрока.",
+            displayTimer !== null
+              ? `Шериф проверяет игрока. Осталось: ${displayTimer} сек.`
+              : "Шериф проверяет игрока.",
         }
       case "doctor-turn":
         return {
           title: "Ход доктора",
           description:
-            state.timer !== null ? `Доктор защищает игрока. Осталось: ${state.timer} сек.` : "Доктор защищает игрока.",
+            displayTimer !== null
+              ? `Доктор защищает игрока. Осталось: ${displayTimer} сек.`
+              : "Доктор защищает игрока.",
         }
       case "lover-turn":
         return {
           title: "Ход любовницы",
           description:
-            state.timer !== null
-              ? `Любовница соблазняет игрока. Осталось: ${state.timer} сек.`
+            displayTimer !== null
+              ? `Любовница соблазняет игрока. Осталось: ${displayTimer} сек.`
               : "Любовница соблазняет игрока.",
         }
       case "night":
@@ -485,11 +510,29 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
   // Проверка, мертв ли игрок
   const isPlayerDead = !currentPlayer?.isAlive
 
+  // Функция для получения максимального времени фазы
+  const getMaxTime = () => {
+    switch (state.phase) {
+      case "day":
+        return 30
+      case "voting":
+        return 15
+      case "last-word":
+        return 30
+      default:
+        return 10
+    }
+  }
+
+  const displayTimer = localTimer !== null ? localTimer : state.timer
+  const maxTime = getMaxTime()
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
-        {/* Левая колонка - информация об игре */}
-        <div className="md:col-span-1 space-y-4">
+      {/* Мобильная адаптация - используем flex-col на мобильных */}
+      <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 lg:gap-6 p-4 lg:p-6">
+        {/* Информация об игре - на мобильных сверху */}
+        <div className="lg:col-span-1 space-y-4">
           {/* Информация о фазе */}
           <Card className="p-4 bg-gray-900/80 backdrop-blur-sm border border-red-800">
             <div className="flex items-center justify-between mb-2">
@@ -504,64 +547,60 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                   : "В процессе"}
               </Badge>
             </div>
-            <p className="text-sm text-white">{phaseInfo.description}</p>
+            <p className="text-sm text-white mb-3">{phaseInfo.description}</p>
 
-            {/* Индикатор таймера */}
-            {state.timer !== null && (
+            {/* Стабильный индикатор таймера */}
+            {displayTimer !== null && (
               <div className="mt-3">
-                <div className="w-full bg-gray-700 rounded-full h-2">
+                <div className="w-full bg-gray-700 rounded-full h-3">
                   <div
-                    className={`h-2 rounded-full transition-all duration-1000 ${state.timer < 5 ? "bg-red-500" : "bg-red-600"}`}
+                    className={`h-3 rounded-full transition-all duration-300 ease-linear ${
+                      displayTimer < 5 ? "bg-red-500" : "bg-red-600"
+                    }`}
                     style={{
-                      width: `${
-                        state.phase === "day"
-                          ? (state.timer / 30) * 100
-                          : state.phase === "voting"
-                            ? (state.timer / 15) * 100
-                            : state.phase === "last-word"
-                              ? (state.timer / 30) * 100
-                              : (state.timer / 10) * 100
-                      }%`,
+                      width: `${Math.max(0, (displayTimer / maxTime) * 100)}%`,
                     }}
                   ></div>
                 </div>
-                <p className="text-center text-sm mt-1 text-red-400 font-bold">{state.timer} сек</p>
+                <p className="text-center text-sm mt-2 text-red-400 font-bold text-lg">{displayTimer} сек</p>
               </div>
             )}
 
-            {/* Кнопка действия в зависимости от фазы */}
-            {state.phase === "day" && !isPlayerDead && (
-              <Button color="danger" variant="flat" size="sm" className="mt-3 w-full" onPress={nextPhase}>
-                Перейти к голосованию
-              </Button>
-            )}
+            {/* Кнопки действий */}
+            <div className="mt-4 space-y-2">
+              {state.phase === "day" && !isPlayerDead && (
+                <Button color="danger" variant="flat" size="sm" className="w-full" onPress={nextPhase}>
+                  Перейти к голосованию
+                </Button>
+              )}
 
-            {(state.phase === "game-over" || isPlayerDead) && (
-              <Button
-                color="danger"
-                variant="flat"
-                size="sm"
-                className="mt-3 w-full"
-                onPress={handleLeaveRoom}
-                startContent={<ExitIcon />}
-              >
-                Выйти из комнаты
-              </Button>
-            )}
+              {(state.phase === "game-over" || isPlayerDead) && (
+                <Button
+                  color="danger"
+                  variant="flat"
+                  size="sm"
+                  className="w-full"
+                  onPress={handleLeaveRoom}
+                  startContent={<ExitIcon />}
+                >
+                  Выйти из комнаты
+                </Button>
+              )}
 
-            {/* Админ панель */}
-            {user?.isAdmin && (
-              <Button
-                color="warning"
-                variant="flat"
-                size="sm"
-                className="mt-3 w-full"
-                onPress={() => setShowAdminPanel(true)}
-                startContent={<AdminIcon />}
-              >
-                Админ панель
-              </Button>
-            )}
+              {/* Админ панель */}
+              {user?.isAdmin && (
+                <Button
+                  color="warning"
+                  variant="flat"
+                  size="sm"
+                  className="w-full"
+                  onPress={() => setShowAdminPanel(true)}
+                  startContent={<AdminIcon />}
+                >
+                  Админ панель
+                </Button>
+              )}
+            </div>
 
             {/* Онлайн статус */}
             {state.isOnline && (
@@ -569,17 +608,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                 <Badge color="success" size="sm">
                   Онлайн: {state.roomId}
                 </Badge>
-                {/* Добавляем кнопку обновления */}
-                <Button
-                  size="sm"
-                  color="primary"
-                  variant="flat"
-                  className="mt-2 w-full"
-                  onPress={updateGameState}
-                  isLoading={isUpdating}
-                >
-                  Обновить состояние
-                </Button>
               </div>
             )}
           </Card>
@@ -629,7 +657,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
               <Button
                 size="sm"
                 variant="light"
-                className="mt-3 text-red-400"
+                className="mt-3 text-red-400 w-full"
                 onPress={onOpen}
                 startContent={<InfoIcon />}
               >
@@ -642,7 +670,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
           {isPlayerDead && state.phase !== "last-word" && (
             <Card className="p-4 bg-red-900/20 backdrop-blur-sm border border-red-800">
               <div className="text-center">
-                <div className="text-red-400 mb-2">
+                <div className="text-red-400 mb-2 flex justify-center">
                   <SkullIcon />
                 </div>
                 <h3 className="font-semibold text-red-400 mb-2">Вы мертвы</h3>
@@ -669,22 +697,22 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
           )}
         </div>
 
-        {/* Центральная колонка - чат */}
-        <div className="md:col-span-1">
-          <Card className="h-[600px] flex flex-col bg-gray-900/80 backdrop-blur-sm border border-red-800">
+        {/* Чат - на мобильных в середине */}
+        <div className="lg:col-span-1 order-2 lg:order-none">
+          <Card className="h-[400px] lg:h-[600px] flex flex-col bg-gray-900/80 backdrop-blur-sm border border-red-800">
             {/* Переключатель чатов для мафии */}
             {isMafia && (
               <div className="flex space-x-1 bg-gray-900/50 p-1 m-3 rounded-lg">
                 <Button
                   size="sm"
-                  className={`flex-1 ${activeChat === "public" ? "bg-red-600 text-white" : "bg-transparent text-gray-400"}`}
+                  className={`flex-1 text-xs lg:text-sm ${activeChat === "public" ? "bg-red-600 text-white" : "bg-transparent text-gray-400"}`}
                   onPress={() => setActiveChat("public")}
                 >
                   Общий чат
                 </Button>
                 <Button
                   size="sm"
-                  className={`flex-1 ${activeChat === "mafia" ? "bg-red-600 text-white" : "bg-transparent text-gray-400"}`}
+                  className={`flex-1 text-xs lg:text-sm ${activeChat === "mafia" ? "bg-red-600 text-white" : "bg-transparent text-gray-400"}`}
                   onPress={() => setActiveChat("mafia")}
                 >
                   Мафия чат
@@ -693,11 +721,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
             )}
 
             <div className="p-3 border-b border-gray-700">
-              <h3 className="font-semibold text-white">{activeChat === "mafia" ? "Чат мафии" : "Чат города"}</h3>
+              <h3 className="font-semibold text-white text-sm lg:text-base">
+                {activeChat === "mafia" ? "Чат мафии" : "Чат города"}
+              </h3>
             </div>
 
             <div className="flex-grow overflow-y-auto p-3" ref={activeChat === "mafia" ? mafiaRef : chatRef}>
-              <div className="space-y-3">
+              <div className="space-y-2 lg:space-y-3">
                 {(activeChat === "mafia" ? state.mafiaMessages : state.messages).map((msg) => {
                   const sender = msg.isSystem
                     ? { name: "Система", avatar: "" }
@@ -709,24 +739,24 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                     <div key={msg.id} className={`flex ${msg.isSystem ? "justify-center" : "gap-2"}`}>
                       {msg.isSystem ? (
                         <div className="bg-gray-800/50 rounded-lg py-2 px-3 max-w-[90%] border border-gray-700">
-                          <p className="text-sm text-white text-center">{msg.text}</p>
+                          <p className="text-xs lg:text-sm text-white text-center">{msg.text}</p>
                         </div>
                       ) : (
                         <>
-                          <Avatar size="sm" name={sender.name.charAt(0)} className="bg-gray-700" />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-1">
-                              <span className="font-medium text-sm text-white">{sender.name}</span>
+                          <Avatar size="sm" name={sender.name.charAt(0)} className="bg-gray-700 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="font-medium text-xs lg:text-sm text-white truncate">{sender.name}</span>
                               {activeChat === "mafia" && (
-                                <Badge color="danger" size="sm">
+                                <Badge color="danger" size="sm" className="text-xs">
                                   {sender.name === state.players.find((p) => p.role === "don")?.name ? "Дон" : "Мафия"}
                                 </Badge>
                               )}
-                              <span className="text-xs text-gray-400">
+                              <span className="text-xs text-gray-400 flex-shrink-0">
                                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                               </span>
                             </div>
-                            <p className="text-sm mt-1 text-white">{msg.text}</p>
+                            <p className="text-xs lg:text-sm mt-1 text-white break-words">{msg.text}</p>
                           </div>
                         </>
                       )}
@@ -754,11 +784,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
                   isDisabled={activeChat === "mafia" ? !canMafiaChat : !canChat}
-                  className="flex-1 bg-gray-900/50 text-white placeholder:text-gray-400"
+                  className="flex-1 bg-gray-900/50 text-white placeholder:text-gray-400 text-sm"
+                  size="sm"
                 />
                 <Button
                   isIconOnly
                   color="danger"
+                  size="sm"
                   onPress={() => handleSendMessage(activeChat === "mafia")}
                   isDisabled={(activeChat === "mafia" ? !canMafiaChat : !canChat) || !message.trim()}
                 >
@@ -769,11 +801,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
           </Card>
         </div>
 
-        {/* Правая колонка - игроки */}
-        <div className="md:col-span-1">
+        {/* Игроки - на мобильных снизу */}
+        <div className="lg:col-span-1 order-3 lg:order-none">
           <Card className="p-4 bg-gray-900/80 backdrop-blur-sm border border-red-800">
-            <h3 className="font-semibold mb-3 text-white">Игроки</h3>
-            <div className="space-y-3">
+            <h3 className="font-semibold mb-3 text-white text-sm lg:text-base">Игроки ({state.players.length})</h3>
+            <div className="space-y-2 lg:space-y-3 max-h-[400px] lg:max-h-none overflow-y-auto">
               {state.players.map((player) => {
                 const isCurrentPlayer = player.clientId === state.clientId
                 const isAlive = player.isAlive
@@ -788,7 +820,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                 return (
                   <div
                     key={player.id}
-                    className={`flex items-center justify-between p-3 rounded-lg transition-colors border ${
+                    className={`flex items-center justify-between p-2 lg:p-3 rounded-lg transition-colors border ${
                       isSelected
                         ? "bg-red-900/30 border-red-700"
                         : isEliminatedPlayer
@@ -796,38 +828,38 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                           : "hover:bg-gray-800/30 border-gray-700"
                     } ${!isAlive && state.phase !== "last-word" ? "opacity-60" : ""}`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 lg:gap-3 flex-1 min-w-0">
                       <Avatar
                         size="sm"
                         name={player.name.charAt(0)}
-                        className={`${!isAlive && state.phase !== "last-word" ? "grayscale" : ""} bg-gray-700`}
+                        className={`${!isAlive && state.phase !== "last-word" ? "grayscale" : ""} bg-gray-700 flex-shrink-0`}
                       />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-white">{player.name}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="font-medium text-white text-sm lg:text-base truncate">{player.name}</span>
                           {isCurrentPlayer && (
-                            <Badge color="danger" size="sm">
+                            <Badge color="danger" size="sm" className="text-xs">
                               Вы
                             </Badge>
                           )}
                           {player.isHost && (
-                            <Badge color="warning" size="sm">
+                            <Badge color="warning" size="sm" className="text-xs">
                               Хост
                             </Badge>
                           )}
                           {isEliminatedPlayer && state.phase === "last-word" && (
-                            <Badge color="warning" size="sm">
+                            <Badge color="warning" size="sm" className="text-xs">
                               Исключен
                             </Badge>
                           )}
                           {/* Показываем роль только если она определена (админ или сам игрок) */}
                           {player.role && (
-                            <span className={`text-xs px-2 py-0.5 rounded ${getBrightRoleColor(player.role)}`}>
+                            <span className={`text-xs px-1 py-0.5 rounded ${getBrightRoleColor(player.role)}`}>
                               {getRoleName(player.role)}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 text-xs text-gray-400">
+                        <div className="flex items-center gap-1 text-xs text-gray-400 flex-wrap">
                           {!isAlive && state.phase !== "last-word" && <span className="text-red-400">Мёртв</span>}
                           {hasVoted && state.phase === "voting" && <span className="text-white">Проголосовал</span>}
                           {isProtected && <span className="text-green-400">Защищен</span>}
@@ -838,7 +870,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                       </div>
                     </div>
 
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 flex-shrink-0">
                       {/* Кнопки действий в зависимости от фазы */}
                       {canVote && isAlive && player.id !== playerId && (
                         <Tooltip content="Голосовать против">
@@ -932,15 +964,15 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
         </div>
 
         {/* Модальное окно с информацией о ролях */}
-        <Modal isOpen={isOpen} onOpenChange={onOpenChange}>
-          <ModalContent className="bg-black/90 border border-gray-800">
+        <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="2xl" scrollBehavior="inside">
+          <ModalContent className="bg-black/90 border border-gray-800 max-h-[90vh]">
             {(onClose) => (
               <>
                 <ModalHeader className="text-white">Роли в игре</ModalHeader>
                 <ModalBody>
                   <div className="space-y-4">
                     <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-full bg-blue-900/50">
+                      <div className="p-2 rounded-full bg-blue-900/50 flex-shrink-0">
                         <div className="text-blue-200">
                           <UserIcon />
                         </div>
@@ -957,7 +989,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                     <Divider className="bg-gray-700" />
 
                     <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-full bg-red-900/50">
+                      <div className="p-2 rounded-full bg-red-900/50 flex-shrink-0">
                         <div className="text-red-200">
                           <SkullIcon />
                         </div>
@@ -974,7 +1006,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                     <Divider className="bg-gray-700" />
 
                     <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-full bg-purple-900/50">
+                      <div className="p-2 rounded-full bg-purple-900/50 flex-shrink-0">
                         <div className="text-purple-200">
                           <CrownIcon />
                         </div>
@@ -991,7 +1023,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                     <Divider className="bg-gray-700" />
 
                     <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-full bg-yellow-900/50">
+                      <div className="p-2 rounded-full bg-yellow-900/50 flex-shrink-0">
                         <div className="text-yellow-200">
                           <ShieldIcon />
                         </div>
@@ -1008,7 +1040,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                     <Divider className="bg-gray-700" />
 
                     <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-full bg-green-900/50">
+                      <div className="p-2 rounded-full bg-green-900/50 flex-shrink-0">
                         <div className="text-green-200">
                           <MedicalIcon />
                         </div>
@@ -1025,7 +1057,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
                     <Divider className="bg-gray-700" />
 
                     <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-full bg-pink-900/50">
+                      <div className="p-2 rounded-full bg-pink-900/50 flex-shrink-0">
                         <div className="text-pink-200">
                           <HeartIcon />
                         </div>
