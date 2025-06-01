@@ -181,11 +181,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
   const mafiaRef = React.useRef<HTMLDivElement>(null)
   const { isOpen, onOpen, onOpenChange } = useDisclosure()
 
-  // Состояние для стабильного таймера
-  const [localTimer, setLocalTimer] = React.useState<number | null>(null)
-  const [lastTimerUpdate, setLastTimerUpdate] = React.useState<number>(0)
-
-  // Добавим функцию для обновления состояния игры
+  // Убираем локальный таймер, используем только серверный
   const updateGameState = async () => {
     if (!state.isOnline) return
 
@@ -198,44 +194,22 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
         setState((prev) => ({
           ...prev,
           ...data.room.gameState,
-          // Используем currentTimer для стабильного отображения
+          // Используем только серверный таймер
           timer: data.room.gameState.currentTimer,
           players: data.room.gameState.players || prev.players,
         }))
-
-        // Обновляем локальный таймер только если получили новое значение
-        if (data.room.gameState.currentTimer !== null && data.room.gameState.currentTimer !== localTimer) {
-          setLocalTimer(data.room.gameState.currentTimer)
-          setLastTimerUpdate(Date.now())
-        }
       }
     } catch (error) {
       console.error("Ошибка обновления состояния игры:", error)
     }
   }
 
-  // Локальный таймер для плавного отсчета
-  React.useEffect(() => {
-    if (localTimer === null || localTimer <= 0) return
-
-    const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - lastTimerUpdate) / 1000)
-      const newTimer = Math.max(0, localTimer - elapsed)
-
-      if (newTimer !== localTimer) {
-        setLocalTimer(newTimer)
-      }
-    }, 100) // Обновляем каждые 100мс для плавности
-
-    return () => clearInterval(interval)
-  }, [localTimer, lastTimerUpdate])
-
-  // Синхронизация с сервером каждые 2 секунды
+  // Синхронизация с сервером каждую секунду
   React.useEffect(() => {
     if (state.isOnline) {
       const syncInterval = setInterval(() => {
         updateGameState()
-      }, 2000) // Увеличили интервал до 2 секунд
+      }, 1000)
 
       return () => clearInterval(syncInterval)
     }
@@ -261,61 +235,55 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
 
   // Получение информации о текущей фазе
   const getPhaseInfo = (): { title: string; description: string } => {
-    const displayTimer = localTimer !== null ? localTimer : state.timer
-
     switch (state.phase) {
       case "day":
         return {
           title: `День ${state.day}`,
           description:
-            displayTimer !== null
-              ? `Обсудите, кто может быть мафией. Осталось: ${displayTimer} сек.`
+            state.timer !== null
+              ? `Обсудите, кто может быть мафией. Осталось: ${state.timer} сек.`
               : "Обсудите, кто может быть мафией.",
         }
       case "voting":
         return {
           title: "Голосование",
           description:
-            displayTimer !== null
-              ? `Выберите, кого вы считаете мафией. Осталось: ${displayTimer} сек.`
+            state.timer !== null
+              ? `Выберите, кого вы считаете мафией. Осталось: ${state.timer} сек.`
               : "Выберите, кого вы считаете мафией.",
         }
       case "last-word":
         return {
           title: "Последнее слово",
           description:
-            displayTimer !== null
-              ? `${state.eliminatedPlayer?.name} может сказать последнее слово. Осталось: ${displayTimer} сек.`
+            state.timer !== null
+              ? `${state.eliminatedPlayer?.name} может сказать последнее слово. Осталось: ${state.timer} сек.`
               : `${state.eliminatedPlayer?.name} говорит последнее слово.`,
         }
       case "mafia-turn":
         return {
           title: "Ход мафии",
           description:
-            displayTimer !== null ? `Мафия выбирает жертву. Осталось: ${displayTimer} сек.` : "Мафия выбирает жертву.",
+            state.timer !== null ? `Мафия выбирает жертву. Осталось: ${state.timer} сек.` : "Мафия выбирает жертву.",
         }
       case "sheriff-turn":
         return {
           title: "Ход шерифа",
           description:
-            displayTimer !== null
-              ? `Шериф проверяет игрока. Осталось: ${displayTimer} сек.`
-              : "Шериф проверяет игрока.",
+            state.timer !== null ? `Шериф проверяет игрока. Осталось: ${state.timer} сек.` : "Шериф проверяет игрока.",
         }
       case "doctor-turn":
         return {
           title: "Ход доктора",
           description:
-            displayTimer !== null
-              ? `Доктор защищает игрока. Осталось: ${displayTimer} сек.`
-              : "Доктор защищает игрока.",
+            state.timer !== null ? `Доктор защищает игрока. Осталось: ${state.timer} сек.` : "Доктор защищает игрока.",
         }
       case "lover-turn":
         return {
           title: "Ход любовницы",
           description:
-            displayTimer !== null
-              ? `Любовница соблазняет игрока. Осталось: ${displayTimer} сек.`
+            state.timer !== null
+              ? `Любовница соблазняет игрока. Осталось: ${state.timer} сек.`
               : "Любовница соблазняет игрока.",
         }
       case "night":
@@ -524,7 +492,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
     }
   }
 
-  const displayTimer = localTimer !== null ? localTimer : state.timer
   const maxTime = getMaxTime()
 
   return (
@@ -549,20 +516,20 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
             </div>
             <p className="text-sm text-white mb-3">{phaseInfo.description}</p>
 
-            {/* Стабильный индикатор таймера */}
-            {displayTimer !== null && (
+            {/* Стабильный индикатор таймера - только серверный */}
+            {state.timer !== null && (
               <div className="mt-3">
                 <div className="w-full bg-gray-700 rounded-full h-3">
                   <div
-                    className={`h-3 rounded-full transition-all duration-300 ease-linear ${
-                      displayTimer < 5 ? "bg-red-500" : "bg-red-600"
+                    className={`h-3 rounded-full transition-all duration-1000 ease-linear ${
+                      state.timer < 5 ? "bg-red-500" : "bg-red-600"
                     }`}
                     style={{
-                      width: `${Math.max(0, (displayTimer / maxTime) * 100)}%`,
+                      width: `${Math.max(0, (state.timer / maxTime) * 100)}%`,
                     }}
                   ></div>
                 </div>
-                <p className="text-center text-sm mt-2 text-red-400 font-bold text-lg">{displayTimer} сек</p>
+                <p className="text-center text-sm mt-2 text-red-400 font-bold text-lg">{state.timer} сек</p>
               </div>
             )}
 
