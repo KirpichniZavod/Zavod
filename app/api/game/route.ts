@@ -169,22 +169,70 @@ function processPhaseTransition(room: any) {
 
 // Обработка голосования
 function processVoting(gameState: any) {
+  const votes = gameState.votes || {}
+  const totalVotes = Object.keys(votes).length
+
+  // Если никто не голосовал - пропускаем голосование
+  if (totalVotes === 0) {
+    const hasLover = gameState.players.some((p: any) => p.role === "lover" && p.isAlive)
+    gameState.phase = hasLover ? "lover-turn" : "mafia-turn"
+    gameState.timer = 10
+    gameState.timerStart = Date.now()
+    gameState.currentTimer = 10
+    gameState.votes = {}
+    gameState.eliminatedPlayer = null
+
+    gameState.messages.push({
+      id: `system-${Date.now()}`,
+      playerId: "system",
+      text: "Никто не проголосовал. Голосование пропущено.",
+      timestamp: Date.now(),
+      isSystem: true,
+    })
+
+    console.log("🗳️ Voting skipped - no votes cast")
+    return
+  }
+
+  // Подсчитываем голоса
   const voteCounts: Record<string, number> = {}
-  Object.values(gameState.votes).forEach((targetId: any) => {
+  Object.values(votes).forEach((targetId: any) => {
     voteCounts[targetId] = (voteCounts[targetId] || 0) + 1
   })
 
-  let maxVotes = 0
+  // Находим максимальное количество голосов
+  const maxVotes = Math.max(...Object.values(voteCounts))
+
+  // Находим всех игроков с максимальным количеством голосов
+  const topCandidates = Object.entries(voteCounts)
+    .filter(([_, count]) => count === maxVotes)
+    .map(([playerId, _]) => playerId)
+
+  console.log(
+    `🗳️ Voting results: ${JSON.stringify(voteCounts)}, max votes: ${maxVotes}, candidates: ${topCandidates.length}`,
+  )
+
   let eliminatedId: string | null = null
 
-  Object.entries(voteCounts).forEach(([id, count]) => {
-    if (count > maxVotes) {
-      maxVotes = count
-      eliminatedId = id
-    }
-  })
+  // Если есть кандидаты на исключение
+  if (topCandidates.length > 0) {
+    // Если несколько кандидатов с одинаковым количеством голосов - выбираем случайного
+    if (topCandidates.length > 1) {
+      const randomIndex = Math.floor(Math.random() * topCandidates.length)
+      eliminatedId = topCandidates[randomIndex]
 
-  if (eliminatedId && maxVotes > 1) {
+      gameState.messages.push({
+        id: `system-${Date.now()}`,
+        playerId: "system",
+        text: `Ничья в голосовании! Случайно выбран игрок для исключения.`,
+        timestamp: Date.now(),
+        isSystem: true,
+      })
+    } else {
+      // Один лидер по голосам
+      eliminatedId = topCandidates[0]
+    }
+
     const eliminatedPlayer = gameState.players.find((p: any) => p.id === eliminatedId)
     if (eliminatedPlayer) {
       gameState.eliminatedPlayer = eliminatedPlayer
@@ -197,28 +245,13 @@ function processVoting(gameState: any) {
       gameState.messages.push({
         id: `system-${Date.now()}`,
         playerId: "system",
-        text: `${eliminatedPlayer.name} был исключен голосованием. Последнее слово...`,
+        text: `${eliminatedPlayer.name} был исключен голосованием (${maxVotes} ${maxVotes === 1 ? "голос" : maxVotes < 5 ? "голоса" : "голосов"}). Последнее слово...`,
         timestamp: Date.now(),
         isSystem: true,
       })
-    }
-  } else {
-    // Никто не исключен
-    const hasLover = gameState.players.some((p: any) => p.role === "lover" && p.isAlive)
-    gameState.phase = hasLover ? "lover-turn" : "mafia-turn"
-    gameState.timer = 10
-    gameState.timerStart = Date.now()
-    gameState.currentTimer = 10
-    gameState.votes = {}
-    gameState.eliminatedPlayer = null
 
-    gameState.messages.push({
-      id: `system-${Date.now()}`,
-      playerId: "system",
-      text: "Никто не был исключен в результате голосования.",
-      timestamp: Date.now(),
-      isSystem: true,
-    })
+      console.log(`🗳️ Player eliminated: ${eliminatedPlayer.name} with ${maxVotes} votes`)
+    }
   }
 }
 
