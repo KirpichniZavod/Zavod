@@ -3604,8 +3604,8 @@ packages:
       '@types/react':
         optional: true
 
-  react-remove-scroll@2.7.0:
-    resolution: {integrity: sha512-sGsQtcjMqdQyijAHytfGEELB8FufGbfXIsvUTe+NLx1GDRJCXtCFLBLUI1eyZCKXXvbEU2C6gai0PZKoIE9Vbg==}
+  react-remove-scroll@2.7.1:
+    resolution: {integrity: sha512-HpMh8+oahmIdOuS5aFKKY6Pyog+FNaZV/XyJOq7b4YFwsFHe5yYfdbIalI4k3vU2nSDql7YskmUseHsRrJqIPA==}
     engines: {node: '>=10'}
     peerDependencies:
       '@types/react': '*'
@@ -5856,7 +5856,7 @@ snapshots:
       aria-hidden: 1.2.6
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
-      react-remove-scroll: 2.7.0(@types/react@19.0.0)(react@19.0.0)
+      react-remove-scroll: 2.7.1(@types/react@19.0.0)(react@19.0.0)
     optionalDependencies:
       '@types/react': 19.0.0
       '@types/react-dom': 19.0.0
@@ -5973,7 +5973,7 @@ snapshots:
       aria-hidden: 1.2.6
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
-      react-remove-scroll: 2.7.0(@types/react@19.0.0)(react@19.0.0)
+      react-remove-scroll: 2.7.1(@types/react@19.0.0)(react@19.0.0)
     optionalDependencies:
       '@types/react': 19.0.0
       '@types/react-dom': 19.0.0
@@ -6036,7 +6036,7 @@ snapshots:
       aria-hidden: 1.2.6
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
-      react-remove-scroll: 2.7.0(@types/react@19.0.0)(react@19.0.0)
+      react-remove-scroll: 2.7.1(@types/react@19.0.0)(react@19.0.0)
     optionalDependencies:
       '@types/react': 19.0.0
       '@types/react-dom': 19.0.0
@@ -6183,7 +6183,7 @@ snapshots:
       aria-hidden: 1.2.6
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
-      react-remove-scroll: 2.7.0(@types/react@19.0.0)(react@19.0.0)
+      react-remove-scroll: 2.7.1(@types/react@19.0.0)(react@19.0.0)
     optionalDependencies:
       '@types/react': 19.0.0
       '@types/react-dom': 19.0.0
@@ -6559,7 +6559,7 @@ snapshots:
 
   '@react-aria/i18n@3.12.8(react-dom@19.0.0(react@19.0.0))(react@19.0.0)':
     dependencies:
-      '@internationalized/date': 3.8.0
+      '@internationalized/date': 3.8.1
       '@internationalized/message': 3.1.7
       '@internationalized/number': 3.6.2
       '@internationalized/string': 3.2.6
@@ -6966,7 +6966,7 @@ snapshots:
       '@react-aria/ssr': 3.9.8(react@19.0.0)
       '@react-stately/flags': 3.1.1
       '@react-stately/utils': 3.10.6(react@19.0.0)
-      '@react-types/shared': 3.29.1(react@19.0.0)
+      '@react-types/shared': 3.29.0(react@19.0.0)
       '@swc/helpers': 0.5.17
       clsx: 2.1.1
       react: 19.0.0
@@ -8304,7 +8304,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.0.0
 
-  react-remove-scroll@2.7.0(@types/react@19.0.0)(react@19.0.0):
+  react-remove-scroll@2.7.1(@types/react@19.0.0)(react@19.0.0):
     dependencies:
       react: 19.0.0
       react-remove-scroll-bar: 2.3.8(@types/react@19.0.0)(react@19.0.0)
