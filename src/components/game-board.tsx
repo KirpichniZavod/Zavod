@@ -198,6 +198,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
         setState((prev) => ({
           ...prev,
           ...data.room.gameState,
+          // Используем currentTimer вместо timer для отображения
+          timer: data.room.gameState.currentTimer,
           // Принудительно обновляем игроков
           players: data.room.gameState.players || prev.players,
         }))
@@ -402,6 +404,26 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
     }
   }
 
+  // Получение яркого цвета для роли
+  const getBrightRoleColor = (role: string): string => {
+    switch (role) {
+      case "civilian":
+        return "text-blue-400 font-bold"
+      case "mafia":
+        return "text-red-400 font-bold"
+      case "sheriff":
+        return "text-yellow-400 font-bold"
+      case "doctor":
+        return "text-green-400 font-bold"
+      case "lover":
+        return "text-pink-400 font-bold"
+      case "don":
+        return "text-purple-400 font-bold"
+      default:
+        return "text-gray-400"
+    }
+  }
+
   // Обработка отправки сообщения
   const handleSendMessage = (isMafiaChat = false) => {
     if (!message.trim()) return
@@ -464,561 +486,571 @@ export const GameBoard: React.FC<GameBoardProps> = ({ onLeaveRoom }) => {
   const isPlayerDead = !currentPlayer?.isAlive
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {/* Левая колонка - информация об игре */}
-      <div className="md:col-span-1 space-y-4">
-        {/* Информация о фазе */}
-        <Card className="p-4 bg-black/50 backdrop-blur-sm border border-gray-800">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-semibold text-white">{phaseInfo.title}</h3>
-            <Badge color={state.phase === "game-over" ? (state.winner === "mafia" ? "danger" : "success") : "primary"}>
-              {state.phase === "game-over"
-                ? state.winner === "mafia"
-                  ? "Победа мафии"
-                  : "Победа мирных"
-                : "В процессе"}
-            </Badge>
-          </div>
-          <p className="text-sm text-white">{phaseInfo.description}</p>
-
-          {/* Индикатор таймера */}
-          {state.timer !== null && (
-            <div className="mt-3">
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full transition-all duration-1000 ${state.timer < 5 ? "bg-danger" : "bg-danger-500"}`}
-                  style={{
-                    width: `${
-                      state.phase === "day"
-                        ? (state.timer / 30) * 100
-                        : state.phase === "voting"
-                          ? (state.timer / 15) * 100
-                          : state.phase === "last-word"
-                            ? (state.timer / 30) * 100
-                            : (state.timer / 10) * 100
-                    }%`,
-                  }}
-                ></div>
-              </div>
-              <p className="text-center text-sm mt-1 text-danger-400 font-medium">{state.timer} сек</p>
-            </div>
-          )}
-
-          {/* Кнопка действия в зависимости от фазы */}
-          {state.phase === "day" && !isPlayerDead && (
-            <Button color="danger" variant="flat" size="sm" className="mt-3 w-full" onPress={nextPhase}>
-              Перейти к голосованию
-            </Button>
-          )}
-
-          {(state.phase === "game-over" || isPlayerDead) && (
-            <Button
-              color="danger"
-              variant="flat"
-              size="sm"
-              className="mt-3 w-full"
-              onPress={handleLeaveRoom}
-              startContent={<ExitIcon />}
-            >
-              Выйти из комнаты
-            </Button>
-          )}
-
-          {/* Админ панель */}
-          {user?.isAdmin && (
-            <Button
-              color="warning"
-              variant="flat"
-              size="sm"
-              className="mt-3 w-full"
-              onPress={() => setShowAdminPanel(true)}
-              startContent={<AdminIcon />}
-            >
-              Админ панель
-            </Button>
-          )}
-
-          {/* Онлайн статус */}
-          {state.isOnline && (
-            <div className="mt-3 text-center">
-              <Badge color="success" size="sm">
-                Онлайн: {state.roomId}
-              </Badge>
-              {/* Добавляем кнопку обновления */}
-              <Button
-                size="sm"
-                color="primary"
-                variant="flat"
-                className="mt-2 w-full"
-                onPress={updateGameState}
-                isLoading={isUpdating}
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
+        {/* Левая колонка - информация об игре */}
+        <div className="md:col-span-1 space-y-4">
+          {/* Информация о фазе */}
+          <Card className="p-4 bg-gray-900/80 backdrop-blur-sm border border-red-800">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold text-white">{phaseInfo.title}</h3>
+              <Badge
+                color={state.phase === "game-over" ? (state.winner === "mafia" ? "danger" : "success") : "primary"}
               >
-                Обновить состояние
-              </Button>
+                {state.phase === "game-over"
+                  ? state.winner === "mafia"
+                    ? "Победа мафии"
+                    : "Победа мирных"
+                  : "В процессе"}
+              </Badge>
             </div>
-          )}
-        </Card>
+            <p className="text-sm text-white">{phaseInfo.description}</p>
 
-        {/* Информация о роли игрока */}
-        {playerRole && (
-          <Card className="p-4 bg-black/50 backdrop-blur-sm border border-gray-800">
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`p-2 rounded-full bg-${getRoleColor(playerRole.role)}-900/50`}>
-                <div className={`text-${getRoleColor(playerRole.role)}-200`}>{playerRole.icon}</div>
-              </div>
-              <div>
-                <h3 className="font-semibold text-white">Ваша роль</h3>
-                <p className={`text-${getRoleColor(playerRole.role)}-200 font-medium`}>{playerRole.name}</p>
-              </div>
-            </div>
-            <p className="text-sm text-white">{playerRole.description}</p>
-
-            {/* Дополнительная информация для специальных ролей */}
-            {(playerRole.role === "sheriff" || playerRole.role === "don") &&
-              Object.keys(state.checkedPlayers).length > 0 && (
-                <div className="mt-3 p-2 bg-warning-900/20 rounded-lg border border-warning-800">
-                  <p className="text-sm text-warning-400 mb-1">Проверенные игроки:</p>
-                  {Object.entries(state.checkedPlayers).map(([playerId, role]) => {
-                    const player = state.players.find((p) => p.id === Number(playerId))
-                    return (
-                      <p key={playerId} className="text-xs text-white">
-                        {player?.name}:{" "}
-                        {playerRole.role === "don" && role === "sheriff" ? "Мирный житель" : getRoleName(role)}
-                      </p>
-                    )
-                  })}
+            {/* Индикатор таймера */}
+            {state.timer !== null && (
+              <div className="mt-3">
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all duration-1000 ${state.timer < 5 ? "bg-red-500" : "bg-red-600"}`}
+                    style={{
+                      width: `${
+                        state.phase === "day"
+                          ? (state.timer / 30) * 100
+                          : state.phase === "voting"
+                            ? (state.timer / 15) * 100
+                            : state.phase === "last-word"
+                              ? (state.timer / 30) * 100
+                              : (state.timer / 10) * 100
+                      }%`,
+                    }}
+                  ></div>
                 </div>
-              )}
-
-            {/* Показываем эффект соблазнения */}
-            {currentPlayer?.isSeduced && (
-              <div className="mt-3 p-2 bg-secondary-900/20 rounded-lg border border-secondary-800">
-                <p className="text-sm text-secondary-400">
-                  💋 Вы соблазнены! Не можете голосовать и использовать способности.
-                </p>
+                <p className="text-center text-sm mt-1 text-red-400 font-bold">{state.timer} сек</p>
               </div>
             )}
 
-            <Button
-              size="sm"
-              variant="light"
-              className="mt-3 text-danger-400"
-              onPress={onOpen}
-              startContent={<InfoIcon />}
-            >
-              Подробнее о ролях
-            </Button>
-          </Card>
-        )}
+            {/* Кнопка действия в зависимости от фазы */}
+            {state.phase === "day" && !isPlayerDead && (
+              <Button color="danger" variant="flat" size="sm" className="mt-3 w-full" onPress={nextPhase}>
+                Перейти к голосованию
+              </Button>
+            )}
 
-        {/* Показываем статус игрока если он мертв */}
-        {isPlayerDead && state.phase !== "last-word" && (
-          <Card className="p-4 bg-red-900/20 backdrop-blur-sm border border-red-800">
-            <div className="text-center">
-              <div className="text-red-400 mb-2">
-                <SkullIcon />
-              </div>
-              <h3 className="font-semibold text-red-400 mb-2">Вы мертвы</h3>
-              <p className="text-sm text-white mb-3">
-                Вы можете наблюдать за игрой, но не можете участвовать в голосовании или отправлять сообщения.
-              </p>
-              <Button color="danger" variant="flat" size="sm" onPress={handleLeaveRoom} startContent={<ExitIcon />}>
+            {(state.phase === "game-over" || isPlayerDead) && (
+              <Button
+                color="danger"
+                variant="flat"
+                size="sm"
+                className="mt-3 w-full"
+                onPress={handleLeaveRoom}
+                startContent={<ExitIcon />}
+              >
                 Выйти из комнаты
               </Button>
-            </div>
-          </Card>
-        )}
+            )}
 
-        {/* Показываем статус последнего слова */}
-        {state.phase === "last-word" && state.eliminatedPlayer?.id === currentPlayer?.id && (
-          <Card className="p-4 bg-orange-900/20 backdrop-blur-sm border border-orange-800">
-            <div className="text-center">
-              <h3 className="font-semibold text-orange-400 mb-2">Ваше последнее слово</h3>
-              <p className="text-sm text-white mb-3">
-                У вас есть 30 секунд, чтобы сказать последнее слово перед исключением из игры.
-              </p>
-            </div>
-          </Card>
-        )}
-      </div>
+            {/* Админ панель */}
+            {user?.isAdmin && (
+              <Button
+                color="warning"
+                variant="flat"
+                size="sm"
+                className="mt-3 w-full"
+                onPress={() => setShowAdminPanel(true)}
+                startContent={<AdminIcon />}
+              >
+                Админ панель
+              </Button>
+            )}
 
-      {/* Центральная колонка - чат */}
-      <div className="md:col-span-1">
-        <Card className="h-[600px] flex flex-col bg-black/50 backdrop-blur-sm border border-gray-800">
-          {/* Переключатель чатов для мафии */}
-          {isMafia && (
-            <div className="flex space-x-1 bg-gray-900/50 p-1 m-3 rounded-lg">
+            {/* Онлайн статус */}
+            {state.isOnline && (
+              <div className="mt-3 text-center">
+                <Badge color="success" size="sm">
+                  Онлайн: {state.roomId}
+                </Badge>
+                {/* Добавляем кнопку обновления */}
+                <Button
+                  size="sm"
+                  color="primary"
+                  variant="flat"
+                  className="mt-2 w-full"
+                  onPress={updateGameState}
+                  isLoading={isUpdating}
+                >
+                  Обновить состояние
+                </Button>
+              </div>
+            )}
+          </Card>
+
+          {/* Информация о роли игрока */}
+          {playerRole && (
+            <Card className="p-4 bg-gray-900/80 backdrop-blur-sm border border-red-800">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`p-2 rounded-full bg-${getRoleColor(playerRole.role)}-900/50`}>
+                  <div className={`text-${getRoleColor(playerRole.role)}-200`}>{playerRole.icon}</div>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">Ваша роль</h3>
+                  <p className={getBrightRoleColor(playerRole.role)}>{playerRole.name}</p>
+                </div>
+              </div>
+              <p className="text-sm text-white">{playerRole.description}</p>
+
+              {/* Дополнительная информация для специальных ролей */}
+              {(playerRole.role === "sheriff" || playerRole.role === "don") &&
+                Object.keys(state.checkedPlayers).length > 0 && (
+                  <div className="mt-3 p-2 bg-yellow-900/20 rounded-lg border border-yellow-800">
+                    <p className="text-sm text-yellow-400 mb-1">Проверенные игроки:</p>
+                    {Object.entries(state.checkedPlayers).map(([playerId, role]) => {
+                      const player = state.players.find((p) => p.id === Number(playerId))
+                      return (
+                        <p key={playerId} className="text-xs text-white">
+                          {player?.name}:{" "}
+                          <span className={getBrightRoleColor(role)}>
+                            {playerRole.role === "don" && role === "sheriff" ? "Мирный житель" : getRoleName(role)}
+                          </span>
+                        </p>
+                      )
+                    })}
+                  </div>
+                )}
+
+              {/* Показываем эффект соблазнения */}
+              {currentPlayer?.isSeduced && (
+                <div className="mt-3 p-2 bg-pink-900/20 rounded-lg border border-pink-800">
+                  <p className="text-sm text-pink-400">
+                    💋 Вы соблазнены! Не можете голосовать и использовать способности.
+                  </p>
+                </div>
+              )}
+
               <Button
                 size="sm"
-                className={`flex-1 ${activeChat === "public" ? "bg-danger-600 text-white" : "bg-transparent text-gray-400"}`}
-                onPress={() => setActiveChat("public")}
+                variant="light"
+                className="mt-3 text-red-400"
+                onPress={onOpen}
+                startContent={<InfoIcon />}
               >
-                Общий чат
+                Подробнее о ролях
               </Button>
-              <Button
-                size="sm"
-                className={`flex-1 ${activeChat === "mafia" ? "bg-danger-600 text-white" : "bg-transparent text-gray-400"}`}
-                onPress={() => setActiveChat("mafia")}
-              >
-                Мафия чат
-              </Button>
-            </div>
+            </Card>
           )}
 
-          <div className="p-3 border-b border-gray-700">
-            <h3 className="font-semibold text-white">{activeChat === "mafia" ? "Чат мафии" : "Чат города"}</h3>
-          </div>
+          {/* Показываем статус игрока если он мертв */}
+          {isPlayerDead && state.phase !== "last-word" && (
+            <Card className="p-4 bg-red-900/20 backdrop-blur-sm border border-red-800">
+              <div className="text-center">
+                <div className="text-red-400 mb-2">
+                  <SkullIcon />
+                </div>
+                <h3 className="font-semibold text-red-400 mb-2">Вы мертвы</h3>
+                <p className="text-sm text-white mb-3">
+                  Вы можете наблюдать за игрой, но не можете участвовать в голосовании или отправлять сообщения.
+                </p>
+                <Button color="danger" variant="flat" size="sm" onPress={handleLeaveRoom} startContent={<ExitIcon />}>
+                  Выйти из комнаты
+                </Button>
+              </div>
+            </Card>
+          )}
 
-          <div className="flex-grow overflow-y-auto p-3" ref={activeChat === "mafia" ? mafiaRef : chatRef}>
+          {/* Показываем статус последнего слова */}
+          {state.phase === "last-word" && state.eliminatedPlayer?.id === currentPlayer?.id && (
+            <Card className="p-4 bg-orange-900/20 backdrop-blur-sm border border-orange-800">
+              <div className="text-center">
+                <h3 className="font-semibold text-orange-400 mb-2">Ваше последнее слово</h3>
+                <p className="text-sm text-white mb-3">
+                  У вас есть 30 секунд, чтобы сказать последнее слово перед исключением из игры.
+                </p>
+              </div>
+            </Card>
+          )}
+        </div>
+
+        {/* Центральная колонка - чат */}
+        <div className="md:col-span-1">
+          <Card className="h-[600px] flex flex-col bg-gray-900/80 backdrop-blur-sm border border-red-800">
+            {/* Переключатель чатов для мафии */}
+            {isMafia && (
+              <div className="flex space-x-1 bg-gray-900/50 p-1 m-3 rounded-lg">
+                <Button
+                  size="sm"
+                  className={`flex-1 ${activeChat === "public" ? "bg-red-600 text-white" : "bg-transparent text-gray-400"}`}
+                  onPress={() => setActiveChat("public")}
+                >
+                  Общий чат
+                </Button>
+                <Button
+                  size="sm"
+                  className={`flex-1 ${activeChat === "mafia" ? "bg-red-600 text-white" : "bg-transparent text-gray-400"}`}
+                  onPress={() => setActiveChat("mafia")}
+                >
+                  Мафия чат
+                </Button>
+              </div>
+            )}
+
+            <div className="p-3 border-b border-gray-700">
+              <h3 className="font-semibold text-white">{activeChat === "mafia" ? "Чат мафии" : "Чат города"}</h3>
+            </div>
+
+            <div className="flex-grow overflow-y-auto p-3" ref={activeChat === "mafia" ? mafiaRef : chatRef}>
+              <div className="space-y-3">
+                {(activeChat === "mafia" ? state.mafiaMessages : state.messages).map((msg) => {
+                  const sender = msg.isSystem
+                    ? { name: "Система", avatar: "" }
+                    : state.players.find((p) => p.id === msg.playerId)
+
+                  if (!sender) return null
+
+                  return (
+                    <div key={msg.id} className={`flex ${msg.isSystem ? "justify-center" : "gap-2"}`}>
+                      {msg.isSystem ? (
+                        <div className="bg-gray-800/50 rounded-lg py-2 px-3 max-w-[90%] border border-gray-700">
+                          <p className="text-sm text-white text-center">{msg.text}</p>
+                        </div>
+                      ) : (
+                        <>
+                          <Avatar size="sm" name={sender.name.charAt(0)} className="bg-gray-700" />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium text-sm text-white">{sender.name}</span>
+                              {activeChat === "mafia" && (
+                                <Badge color="danger" size="sm">
+                                  {sender.name === state.players.find((p) => p.role === "don")?.name ? "Дон" : "Мафия"}
+                                </Badge>
+                              )}
+                              <span className="text-xs text-gray-400">
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <p className="text-sm mt-1 text-white">{msg.text}</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-gray-700">
+              <div className="flex gap-2">
+                <Input
+                  placeholder={
+                    activeChat === "mafia"
+                      ? canMafiaChat
+                        ? "Сообщение для мафии..."
+                        : "Мафия чат недоступен"
+                      : canChat
+                        ? state.phase === "last-word"
+                          ? "Ваше последнее слово..."
+                          : "Введите сообщение..."
+                        : "Чат недоступен"
+                  }
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  isDisabled={activeChat === "mafia" ? !canMafiaChat : !canChat}
+                  className="flex-1 bg-gray-900/50 text-white placeholder:text-gray-400"
+                />
+                <Button
+                  isIconOnly
+                  color="danger"
+                  onPress={() => handleSendMessage(activeChat === "mafia")}
+                  isDisabled={(activeChat === "mafia" ? !canMafiaChat : !canChat) || !message.trim()}
+                >
+                  <SendIcon />
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Правая колонка - игроки */}
+        <div className="md:col-span-1">
+          <Card className="p-4 bg-gray-900/80 backdrop-blur-sm border border-red-800">
+            <h3 className="font-semibold mb-3 text-white">Игроки</h3>
             <div className="space-y-3">
-              {(activeChat === "mafia" ? state.mafiaMessages : state.messages).map((msg) => {
-                const sender = msg.isSystem
-                  ? { name: "Система", avatar: "" }
-                  : state.players.find((p) => p.id === msg.playerId)
-
-                if (!sender) return null
+              {state.players.map((player) => {
+                const isCurrentPlayer = player.clientId === state.clientId
+                const isAlive = player.isAlive
+                const hasVoted = Object.keys(state.votes).includes(player.id.toString())
+                const isSelected = state.selectedPlayer === player.id
+                const isProtected = state.protectedPlayer === player.id
+                const isChecked = state.sheriffChecked === player.id
+                const isSeduced = player.isSeduced
+                const isLoverTarget = state.loverTarget === player.id
+                const isEliminatedPlayer = state.eliminatedPlayer?.id === player.id
 
                 return (
-                  <div key={msg.id} className={`flex ${msg.isSystem ? "justify-center" : "gap-2"}`}>
-                    {msg.isSystem ? (
-                      <div className="bg-gray-800/50 rounded-lg py-2 px-3 max-w-[90%] border border-gray-700">
-                        <p className="text-sm text-white text-center">{msg.text}</p>
-                      </div>
-                    ) : (
-                      <>
-                        <Avatar size="sm" name={sender.name.charAt(0)} className="bg-gray-700" />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-1">
-                            <span className="font-medium text-sm text-white">{sender.name}</span>
-                            {activeChat === "mafia" && (
-                              <Badge color="danger" size="sm">
-                                {sender.name === state.players.find((p) => p.role === "don")?.name ? "Дон" : "Мафия"}
-                              </Badge>
-                            )}
-                            <span className="text-xs text-gray-400">
-                              {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                          </div>
-                          <p className="text-sm mt-1 text-white">{msg.text}</p>
+                  <div
+                    key={player.id}
+                    className={`flex items-center justify-between p-3 rounded-lg transition-colors border ${
+                      isSelected
+                        ? "bg-red-900/30 border-red-700"
+                        : isEliminatedPlayer
+                          ? "bg-orange-900/30 border-orange-700"
+                          : "hover:bg-gray-800/30 border-gray-700"
+                    } ${!isAlive && state.phase !== "last-word" ? "opacity-60" : ""}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar
+                        size="sm"
+                        name={player.name.charAt(0)}
+                        className={`${!isAlive && state.phase !== "last-word" ? "grayscale" : ""} bg-gray-700`}
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-white">{player.name}</span>
+                          {isCurrentPlayer && (
+                            <Badge color="danger" size="sm">
+                              Вы
+                            </Badge>
+                          )}
+                          {player.isHost && (
+                            <Badge color="warning" size="sm">
+                              Хост
+                            </Badge>
+                          )}
+                          {isEliminatedPlayer && state.phase === "last-word" && (
+                            <Badge color="warning" size="sm">
+                              Исключен
+                            </Badge>
+                          )}
+                          {/* Показываем роль яркими цветами */}
+                          <span className={`text-xs px-2 py-0.5 rounded ${getBrightRoleColor(player.role)}`}>
+                            {getRoleName(player.role)}
+                          </span>
                         </div>
-                      </>
-                    )}
+                        <div className="flex items-center gap-1 text-xs text-gray-400">
+                          {!isAlive && state.phase !== "last-word" && <span className="text-red-400">Мёртв</span>}
+                          {hasVoted && state.phase === "voting" && <span className="text-white">Проголосовал</span>}
+                          {isProtected && <span className="text-green-400">Защищен</span>}
+                          {isChecked && <span className="text-yellow-400">Проверен</span>}
+                          {isSeduced && <span className="text-pink-400">Соблазнен 💋</span>}
+                          {!player.canVote && isAlive && <span className="text-gray-500">Не может голосовать</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-1">
+                      {/* Кнопки действий в зависимости от фазы */}
+                      {canVote && isAlive && player.id !== playerId && (
+                        <Tooltip content="Голосовать против">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            color={votedFor === player.id ? "danger" : "default"}
+                            variant={votedFor === player.id ? "solid" : "light"}
+                            onPress={() => vote(player.id)}
+                          >
+                            <ThumbsDownIcon />
+                          </Button>
+                        </Tooltip>
+                      )}
+
+                      {canSelectTarget && isAlive && player.role !== "mafia" && player.role !== "don" && (
+                        <Tooltip content="Выбрать жертву">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            color={isSelected ? "danger" : "default"}
+                            variant={isSelected ? "solid" : "light"}
+                            onPress={() => selectPlayer(player.id)}
+                          >
+                            <TargetIcon />
+                          </Button>
+                        </Tooltip>
+                      )}
+
+                      {canSheriffCheck && isAlive && player.id !== playerId && (
+                        <Tooltip content="Проверить игрока">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            color={isChecked ? "warning" : "default"}
+                            variant={isChecked ? "solid" : "light"}
+                            onPress={() => sheriffCheck(player.id)}
+                          >
+                            <SearchIcon />
+                          </Button>
+                        </Tooltip>
+                      )}
+
+                      {canDoctorProtect && isAlive && (
+                        <Tooltip content="Защитить игрока">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            color={isProtected ? "success" : "default"}
+                            variant={isProtected ? "solid" : "light"}
+                            onPress={() => doctorProtect(player.id)}
+                          >
+                            <ProtectIcon />
+                          </Button>
+                        </Tooltip>
+                      )}
+
+                      {canLoverSeduce && isAlive && player.id !== playerId && (
+                        <Tooltip content="Соблазнить игрока">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            color={isLoverTarget ? "secondary" : "default"}
+                            variant={isLoverTarget ? "solid" : "light"}
+                            onPress={() => loverSeduce(player.id)}
+                          >
+                            <SeduceIcon />
+                          </Button>
+                        </Tooltip>
+                      )}
+
+                      {canDonCheck && isAlive && player.id !== playerId && (
+                        <Tooltip content="Проверить игрока (Дон)">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            color="warning"
+                            variant="light"
+                            onPress={() => donCheck(player.id)}
+                          >
+                            <SearchIcon />
+                          </Button>
+                        </Tooltip>
+                      )}
+                    </div>
                   </div>
                 )
               })}
             </div>
-          </div>
+          </Card>
+        </div>
 
-          <div className="p-3 border-t border-gray-700">
-            <div className="flex gap-2">
-              <Input
-                placeholder={
-                  activeChat === "mafia"
-                    ? canMafiaChat
-                      ? "Сообщение для мафии..."
-                      : "Мафия чат недоступен"
-                    : canChat
-                      ? state.phase === "last-word"
-                        ? "Ваше последнее слово..."
-                        : "Введите сообщение..."
-                      : "Чат недоступен"
-                }
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                isDisabled={activeChat === "mafia" ? !canMafiaChat : !canChat}
-                className="flex-1 bg-gray-900/50 text-white placeholder:text-gray-400"
-              />
-              <Button
-                isIconOnly
-                color="danger"
-                onPress={() => handleSendMessage(activeChat === "mafia")}
-                isDisabled={(activeChat === "mafia" ? !canMafiaChat : !canChat) || !message.trim()}
-              >
-                <SendIcon />
-              </Button>
-            </div>
-          </div>
-        </Card>
+        {/* Модальное окно с информацией о ролях */}
+        <Modal isOpen={isOpen} onOpenChange={onOpenChange}>
+          <ModalContent className="bg-black/90 border border-gray-800">
+            {(onClose) => (
+              <>
+                <ModalHeader className="text-white">Роли в игре</ModalHeader>
+                <ModalBody>
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-full bg-blue-900/50">
+                        <div className="text-blue-200">
+                          <UserIcon />
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-blue-200">Мирный житель</h4>
+                        <p className="text-sm text-white">
+                          Обычный житель города. Днём участвует в обсуждении и голосовании. Цель - вычислить и устранить
+                          всех членов мафии.
+                        </p>
+                      </div>
+                    </div>
+
+                    <Divider className="bg-gray-700" />
+
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-full bg-red-900/50">
+                        <div className="text-red-200">
+                          <SkullIcon />
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-red-200">Мафия</h4>
+                        <p className="text-sm text-white">
+                          Член преступной группировки. Знает других членов мафии. Каждую ночь мафия выбирает одну
+                          жертву. Цель - устранить всех мирных жителей.
+                        </p>
+                      </div>
+                    </div>
+
+                    <Divider className="bg-gray-700" />
+
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-full bg-purple-900/50">
+                        <div className="text-purple-200">
+                          <CrownIcon />
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-purple-200">Дон мафии</h4>
+                        <p className="text-sm text-white">
+                          Глава мафии. Имеет те же способности, что и обычная мафия, но шериф видит его как мирного
+                          жителя. Может проверять игроков ночью.
+                        </p>
+                      </div>
+                    </div>
+
+                    <Divider className="bg-gray-700" />
+
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-full bg-yellow-900/50">
+                        <div className="text-yellow-200">
+                          <ShieldIcon />
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-yellow-200">Шериф</h4>
+                        <p className="text-sm text-white">
+                          Представитель закона. Каждую ночь может проверить одного игрока и узнать его роль. Цель -
+                          помочь мирным жителям вычислить мафию.
+                        </p>
+                      </div>
+                    </div>
+
+                    <Divider className="bg-gray-700" />
+
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-full bg-green-900/50">
+                        <div className="text-green-200">
+                          <MedicalIcon />
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-green-200">Доктор</h4>
+                        <p className="text-sm text-white">
+                          Городской врач. Каждую ночь может защитить одного игрока от убийства мафии. Не может защищать
+                          одного и того же игрока две ночи подряд.
+                        </p>
+                      </div>
+                    </div>
+
+                    <Divider className="bg-gray-700" />
+
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-full bg-pink-900/50">
+                        <div className="text-pink-200">
+                          <HeartIcon />
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-pink-200">Любовница</h4>
+                        <p className="text-sm text-white">
+                          Каждую ночь может соблазнить одного игрока. Соблазненный игрок теряет право голоса на
+                          следующий день и не может использовать специальные способности следующей ночью.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </ModalBody>
+                <ModalFooter>
+                  <Button color="danger" onPress={onClose}>
+                    Понятно
+                  </Button>
+                </ModalFooter>
+              </>
+            )}
+          </ModalContent>
+        </Modal>
+
+        {/* Админ панель */}
+        {showAdminPanel && <AdminPanel onClose={() => setShowAdminPanel(false)} />}
       </div>
-
-      {/* Правая колонка - игроки */}
-      <div className="md:col-span-1">
-        <Card className="p-4 bg-black/50 backdrop-blur-sm border border-gray-800">
-          <h3 className="font-semibold mb-3 text-white">Игроки</h3>
-          <div className="space-y-3">
-            {state.players.map((player) => {
-              const isCurrentPlayer = player.clientId === state.clientId
-              const isAlive = player.isAlive
-              const hasVoted = Object.keys(state.votes).includes(player.id.toString())
-              const isSelected = state.selectedPlayer === player.id
-              const isProtected = state.protectedPlayer === player.id
-              const isChecked = state.sheriffChecked === player.id
-              const isSeduced = player.isSeduced
-              const isLoverTarget = state.loverTarget === player.id
-              const isEliminatedPlayer = state.eliminatedPlayer?.id === player.id
-
-              return (
-                <div
-                  key={player.id}
-                  className={`flex items-center justify-between p-3 rounded-lg transition-colors border ${
-                    isSelected
-                      ? "bg-danger-900/30 border-danger-700"
-                      : isEliminatedPlayer
-                        ? "bg-orange-900/30 border-orange-700"
-                        : "hover:bg-gray-800/30 border-gray-700"
-                  } ${!isAlive && state.phase !== "last-word" ? "opacity-60" : ""}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar
-                      size="sm"
-                      name={player.name.charAt(0)}
-                      className={`${!isAlive && state.phase !== "last-word" ? "grayscale" : ""} bg-gray-700`}
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-white">{player.name}</span>
-                        {isCurrentPlayer && (
-                          <Badge color="danger" size="sm">
-                            Вы
-                          </Badge>
-                        )}
-                        {player.isHost && (
-                          <Badge color="warning" size="sm">
-                            Хост
-                          </Badge>
-                        )}
-                        {isEliminatedPlayer && state.phase === "last-word" && (
-                          <Badge color="warning" size="sm">
-                            Исключен
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-gray-400">
-                        {!isAlive && state.phase !== "last-word" && <span className="text-red-400">Мёртв</span>}
-                        {hasVoted && state.phase === "voting" && <span className="text-white">Проголосовал</span>}
-                        {isProtected && <span className="text-success-400">Защищен</span>}
-                        {isChecked && <span className="text-warning-400">Проверен</span>}
-                        {isSeduced && <span className="text-secondary-400">Соблазнен 💋</span>}
-                        {!player.canVote && isAlive && <span className="text-gray-500">Не может голосовать</span>}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-1">
-                    {/* Кнопки действий в зависимости от фазы */}
-                    {canVote && isAlive && player.id !== playerId && (
-                      <Tooltip content="Голосовать против">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          color={votedFor === player.id ? "danger" : "default"}
-                          variant={votedFor === player.id ? "solid" : "light"}
-                          onPress={() => vote(player.id)}
-                        >
-                          <ThumbsDownIcon />
-                        </Button>
-                      </Tooltip>
-                    )}
-
-                    {canSelectTarget && isAlive && player.role !== "mafia" && player.role !== "don" && (
-                      <Tooltip content="Выбрать жертву">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          color={isSelected ? "danger" : "default"}
-                          variant={isSelected ? "solid" : "light"}
-                          onPress={() => selectPlayer(player.id)}
-                        >
-                          <TargetIcon />
-                        </Button>
-                      </Tooltip>
-                    )}
-
-                    {canSheriffCheck && isAlive && player.id !== playerId && (
-                      <Tooltip content="Проверить игрока">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          color={isChecked ? "warning" : "default"}
-                          variant={isChecked ? "solid" : "light"}
-                          onPress={() => sheriffCheck(player.id)}
-                        >
-                          <SearchIcon />
-                        </Button>
-                      </Tooltip>
-                    )}
-
-                    {canDoctorProtect && isAlive && (
-                      <Tooltip content="Защитить игрока">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          color={isProtected ? "success" : "default"}
-                          variant={isProtected ? "solid" : "light"}
-                          onPress={() => doctorProtect(player.id)}
-                        >
-                          <ProtectIcon />
-                        </Button>
-                      </Tooltip>
-                    )}
-
-                    {canLoverSeduce && isAlive && player.id !== playerId && (
-                      <Tooltip content="Соблазнить игрока">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          color={isLoverTarget ? "secondary" : "default"}
-                          variant={isLoverTarget ? "solid" : "light"}
-                          onPress={() => loverSeduce(player.id)}
-                        >
-                          <SeduceIcon />
-                        </Button>
-                      </Tooltip>
-                    )}
-
-                    {canDonCheck && isAlive && player.id !== playerId && (
-                      <Tooltip content="Проверить игрока (Дон)">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          color="warning"
-                          variant="light"
-                          onPress={() => donCheck(player.id)}
-                        >
-                          <SearchIcon />
-                        </Button>
-                      </Tooltip>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </Card>
-      </div>
-
-      {/* Модальное окно с информацией о ролях */}
-      <Modal isOpen={isOpen} onOpenChange={onOpenChange}>
-        <ModalContent className="bg-black/90 border border-gray-800">
-          {(onClose) => (
-            <>
-              <ModalHeader className="text-white">Роли в игре</ModalHeader>
-              <ModalBody>
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-full bg-primary-900/50">
-                      <div className="text-primary-200">
-                        <UserIcon />
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-primary-200">Мирный житель</h4>
-                      <p className="text-sm text-white">
-                        Обычный житель города. Днём участвует в обсуждении и голосовании. Цель - вычислить и устранить
-                        всех членов мафии.
-                      </p>
-                    </div>
-                  </div>
-
-                  <Divider className="bg-gray-700" />
-
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-full bg-danger-900/50">
-                      <div className="text-danger-200">
-                        <SkullIcon />
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-danger-200">Мафия</h4>
-                      <p className="text-sm text-white">
-                        Член преступной группировки. Знает других членов мафии. Каждую ночь мафия выбирает одну жертву.
-                        Цель - устранить всех мирных жителей.
-                      </p>
-                    </div>
-                  </div>
-
-                  <Divider className="bg-gray-700" />
-
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-full bg-danger-900/50">
-                      <div className="text-danger-200">
-                        <CrownIcon />
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-danger-200">Дон мафии</h4>
-                      <p className="text-sm text-white">
-                        Глава мафии. Имеет те же способности, что и обычная мафия, но шериф видит его как мирного
-                        жителя. Может проверять игроков ночью.
-                      </p>
-                    </div>
-                  </div>
-
-                  <Divider className="bg-gray-700" />
-
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-full bg-warning-900/50">
-                      <div className="text-warning-200">
-                        <ShieldIcon />
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-warning-200">Шериф</h4>
-                      <p className="text-sm text-white">
-                        Представитель закона. Каждую ночь может проверить одного игрока и узнать его роль. Цель - помочь
-                        мирным жителям вычислить мафию.
-                      </p>
-                    </div>
-                  </div>
-
-                  <Divider className="bg-gray-700" />
-
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-full bg-success-900/50">
-                      <div className="text-success-200">
-                        <MedicalIcon />
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-success-200">Доктор</h4>
-                      <p className="text-sm text-white">
-                        Городской врач. Каждую ночь может защитить одного игрока от убийства мафии. Не может защищать
-                        одного и того же игрока две ночи подряд.
-                      </p>
-                    </div>
-                  </div>
-
-                  <Divider className="bg-gray-700" />
-
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-full bg-secondary-900/50">
-                      <div className="text-secondary-200">
-                        <HeartIcon />
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-secondary-200">Любовница</h4>
-                      <p className="text-sm text-white">
-                        Каждую ночь может соблазнить одного игрока. Соблазненный игрок теряет право голоса на следующий
-                        день и не может использовать специальные способности следующей ночью.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </ModalBody>
-              <ModalFooter>
-                <Button color="danger" onPress={onClose}>
-                  Понятно
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
-
-      {/* Админ панель */}
-      {showAdminPanel && <AdminPanel onClose={() => setShowAdminPanel(false)} />}
     </div>
   )
 }

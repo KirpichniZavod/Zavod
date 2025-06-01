@@ -90,65 +90,145 @@ function checkWinCondition(gamePlayers: any[]): "mafia" | "civilians" | null {
   return null
 }
 
-// Логика игры на сервере
-function processGameLogic(room: any) {
-  if (!room.gameState) return
+// Обновление таймера
+function updateTimer(room: any) {
+  if (!room.gameState || room.gameState.timer === null) return
 
+  const now = Date.now()
+  if (!room.gameState.timerStart) {
+    room.gameState.timerStart = now
+  }
+
+  const elapsed = Math.floor((now - room.gameState.timerStart) / 1000)
+  const remaining = Math.max(0, room.gameState.timer - elapsed)
+
+  if (remaining !== room.gameState.currentTimer) {
+    room.gameState.currentTimer = remaining
+
+    if (remaining === 0) {
+      // Таймер истек, переходим к следующей фазе
+      processPhaseTransition(room)
+    }
+  }
+}
+
+// Переход между фазами
+function processPhaseTransition(room: any) {
   const gameState = room.gameState
 
-  // Обработка голосования
-  if (gameState.phase === "voting") {
-    const voteCounts: Record<string, number> = {}
-    Object.values(gameState.votes).forEach((targetId: any) => {
-      voteCounts[targetId] = (voteCounts[targetId] || 0) + 1
-    })
+  switch (gameState.phase) {
+    case "day":
+      gameState.phase = "voting"
+      gameState.timer = 15
+      gameState.timerStart = Date.now()
+      gameState.currentTimer = 15
+      gameState.messages.push({
+        id: `system-${Date.now()}`,
+        playerId: "system",
+        text: "Время обсуждения истекло! Начинается голосование.",
+        timestamp: Date.now(),
+        isSystem: true,
+      })
+      break
 
-    let maxVotes = 0
-    let eliminatedId: string | null = null
+    case "voting":
+      processVoting(gameState)
+      break
 
-    Object.entries(voteCounts).forEach(([id, count]) => {
-      if (count > maxVotes) {
-        maxVotes = count
-        eliminatedId = id
-      }
-    })
+    case "last-word":
+      processLastWord(gameState)
+      break
 
-    if (eliminatedId && maxVotes > 1) {
-      const eliminatedPlayer = gameState.players.find((p: any) => p.id === eliminatedId)
-      if (eliminatedPlayer) {
-        gameState.eliminatedPlayer = eliminatedPlayer
-        gameState.phase = "last-word"
-        gameState.timer = 30
-        gameState.votes = {}
-
-        gameState.messages.push({
-          id: `system-${Date.now()}`,
-          playerId: "system",
-          text: `${eliminatedPlayer.name} был исключен голосованием. Последнее слово...`,
-          timestamp: Date.now(),
-          isSystem: true,
-        })
-      }
-    } else {
-      // Никто не исключен
-      const hasLover = gameState.players.some((p: any) => p.role === "lover" && p.isAlive)
-      gameState.phase = hasLover ? "lover-turn" : "mafia-turn"
+    case "mafia-turn":
+      gameState.phase = "sheriff-turn"
       gameState.timer = 10
+      gameState.timerStart = Date.now()
+      gameState.currentTimer = 10
+      break
+
+    case "sheriff-turn":
+      const hasDoctor = gameState.players.some((p: any) => p.role === "doctor" && p.isAlive)
+      if (hasDoctor) {
+        gameState.phase = "doctor-turn"
+        gameState.timer = 10
+        gameState.timerStart = Date.now()
+        gameState.currentTimer = 10
+      } else {
+        startNewDay(gameState)
+      }
+      break
+
+    case "doctor-turn":
+      startNewDay(gameState)
+      break
+
+    case "lover-turn":
+      gameState.phase = "mafia-turn"
+      gameState.timer = 15
+      gameState.timerStart = Date.now()
+      gameState.currentTimer = 15
+      break
+  }
+}
+
+// Обработка голосования
+function processVoting(gameState: any) {
+  const voteCounts: Record<string, number> = {}
+  Object.values(gameState.votes).forEach((targetId: any) => {
+    voteCounts[targetId] = (voteCounts[targetId] || 0) + 1
+  })
+
+  let maxVotes = 0
+  let eliminatedId: string | null = null
+
+  Object.entries(voteCounts).forEach(([id, count]) => {
+    if (count > maxVotes) {
+      maxVotes = count
+      eliminatedId = id
+    }
+  })
+
+  if (eliminatedId && maxVotes > 1) {
+    const eliminatedPlayer = gameState.players.find((p: any) => p.id === eliminatedId)
+    if (eliminatedPlayer) {
+      gameState.eliminatedPlayer = eliminatedPlayer
+      gameState.phase = "last-word"
+      gameState.timer = 30
+      gameState.timerStart = Date.now()
+      gameState.currentTimer = 30
       gameState.votes = {}
-      gameState.eliminatedPlayer = null
 
       gameState.messages.push({
         id: `system-${Date.now()}`,
         playerId: "system",
-        text: "Никто не был исключен в результате голосования.",
+        text: `${eliminatedPlayer.name} был исключен голосованием. Последнее слово...`,
         timestamp: Date.now(),
         isSystem: true,
       })
     }
-  }
+  } else {
+    // Никто не исключен
+    const hasLover = gameState.players.some((p: any) => p.role === "lover" && p.isAlive)
+    gameState.phase = hasLover ? "lover-turn" : "mafia-turn"
+    gameState.timer = 10
+    gameState.timerStart = Date.now()
+    gameState.currentTimer = 10
+    gameState.votes = {}
+    gameState.eliminatedPlayer = null
 
-  // Обработка последнего слова
-  if (gameState.phase === "last-word" && gameState.eliminatedPlayer) {
+    gameState.messages.push({
+      id: `system-${Date.now()}`,
+      playerId: "system",
+      text: "Никто не был исключен в результате голосования.",
+      timestamp: Date.now(),
+      isSystem: true,
+    })
+  }
+}
+
+// Обработка последнего слова
+function processLastWord(gameState: any) {
+  if (gameState.eliminatedPlayer) {
     // Убиваем исключенного игрока
     gameState.players = gameState.players.map((p: any) => {
       if (p.id === gameState.eliminatedPlayer?.id) {
@@ -162,6 +242,8 @@ function processGameLogic(room: any) {
       gameState.phase = "game-over"
       gameState.winner = winner
       gameState.timer = null
+      gameState.timerStart = null
+      gameState.currentTimer = null
 
       gameState.messages.push({
         id: `system-${Date.now()}`,
@@ -178,6 +260,8 @@ function processGameLogic(room: any) {
       const hasLover = gameState.players.some((p: any) => p.role === "lover" && p.isAlive)
       gameState.phase = hasLover ? "lover-turn" : "mafia-turn"
       gameState.timer = 10
+      gameState.timerStart = Date.now()
+      gameState.currentTimer = 10
 
       gameState.messages.push({
         id: `system-${Date.now()}`,
@@ -189,81 +273,6 @@ function processGameLogic(room: any) {
         isSystem: true,
       })
     }
-  }
-
-  // Обработка ночных действий
-  if (gameState.phase === "mafia-turn") {
-    // Переходим к шерифу
-    gameState.phase = "sheriff-turn"
-    gameState.timer = 10
-
-    gameState.messages.push({
-      id: `system-${Date.now()}`,
-      playerId: "system",
-      text: "Шериф проводит расследование...",
-      timestamp: Date.now(),
-      isSystem: true,
-    })
-  }
-
-  if (gameState.phase === "sheriff-turn") {
-    const hasDoctor = gameState.players.some((p: any) => p.role === "doctor" && p.isAlive)
-
-    if (hasDoctor) {
-      gameState.phase = "doctor-turn"
-      gameState.timer = 10
-
-      gameState.messages.push({
-        id: `system-${Date.now()}`,
-        playerId: "system",
-        text: "Доктор выбирает, кого защитить...",
-        timestamp: Date.now(),
-        isSystem: true,
-      })
-    } else {
-      // Переходим к новому дню
-      startNewDay(gameState)
-    }
-  }
-
-  if (gameState.phase === "doctor-turn") {
-    // Переходим к новому дню
-    startNewDay(gameState)
-  }
-
-  if (gameState.phase === "lover-turn") {
-    // Применяем эффект соблазнения
-    gameState.players = gameState.players.map((player: any) => {
-      const resetPlayer = {
-        ...player,
-        isSeduced: false,
-        canVote: true,
-        canUseAbility: true,
-      }
-
-      if (gameState.loverTarget && player.id === gameState.loverTarget) {
-        return {
-          ...resetPlayer,
-          isSeduced: true,
-          canVote: false,
-          canUseAbility: false,
-        }
-      }
-
-      return resetPlayer
-    })
-
-    gameState.seducedPlayer = gameState.loverTarget
-    gameState.phase = "mafia-turn"
-    gameState.timer = 15
-
-    gameState.messages.push({
-      id: `system-${Date.now()}`,
-      playerId: "system",
-      text: "Мафия выбирает жертву...",
-      timestamp: Date.now(),
-      isSystem: true,
-    })
   }
 }
 
@@ -328,6 +337,8 @@ function startNewDay(gameState: any) {
     gameState.phase = "game-over"
     gameState.winner = winner
     gameState.timer = null
+    gameState.timerStart = null
+    gameState.currentTimer = null
 
     gameState.messages.push({
       id: `system-${Date.now()}`,
@@ -343,6 +354,8 @@ function startNewDay(gameState: any) {
     gameState.phase = "day"
     gameState.day = gameState.day + 1
     gameState.timer = 30
+    gameState.timerStart = Date.now()
+    gameState.currentTimer = 30
     gameState.selectedPlayer = null
     gameState.protectedPlayer = null
     gameState.sheriffChecked = null
@@ -367,10 +380,7 @@ export async function GET(request: NextRequest) {
     const roomId = searchParams.get("roomId")
     const playerId = searchParams.get("playerId")
 
-    console.log(`GET /api/game - roomId: ${roomId}, playerId: ${playerId}`)
-
     if (!roomId || !playerId) {
-      console.log("Missing parameters")
       return NextResponse.json({ success: false, error: "Отсутствуют параметры" })
     }
 
@@ -378,12 +388,10 @@ export async function GET(request: NextRequest) {
     const player = players.get(playerId)
 
     if (!room) {
-      console.log(`Room not found: ${roomId}`)
       return NextResponse.json({ success: false, error: "Комната не найдена" })
     }
 
     if (!player) {
-      console.log(`Player not found: ${playerId}`)
       return NextResponse.json({ success: false, error: "Игрок не найден" })
     }
 
@@ -393,8 +401,6 @@ export async function GET(request: NextRequest) {
 
     // Если игра началась, но состояние игры не создано, создаем его
     if (room.status === "playing" && !room.gameState) {
-      console.log(`Creating game state for room ${roomId}`)
-
       // Назначаем роли только реальным игрокам
       const roleAssignments = assignRoles(room.players, room.players.length)
 
@@ -424,6 +430,8 @@ export async function GET(request: NextRequest) {
         phase: "day",
         day: 1,
         timer: 30,
+        timerStart: Date.now(),
+        currentTimer: 30,
         votes: {},
         selectedPlayer: null,
         eliminatedPlayer: null,
@@ -447,12 +455,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Обрабатываем логику игры
+    // Обновляем таймер
     if (room.gameState) {
-      processGameLogic(room)
+      updateTimer(room)
     }
 
-    console.log(`Returning game state for room ${roomId}`)
     return NextResponse.json({
       success: true,
       room: {
@@ -492,8 +499,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { roomId, playerId, action, data } = body
-
-    console.log(`POST /api/game - Action: ${action} from player ${playerId} in room ${roomId}`)
 
     if (!roomId || !playerId) {
       return NextResponse.json({ success: false, error: "Отсутствуют обязательные параметры" })
@@ -557,6 +562,8 @@ export async function POST(request: NextRequest) {
         if (gameState.phase === "day") {
           gameState.phase = "voting"
           gameState.timer = 15
+          gameState.timerStart = Date.now()
+          gameState.currentTimer = 15
           gameState.messages.push({
             id: `system-${Date.now()}`,
             playerId: "system",
@@ -631,6 +638,8 @@ export async function POST(request: NextRequest) {
               gameState.phase = "game-over"
               gameState.winner = winner
               gameState.timer = null
+              gameState.timerStart = null
+              gameState.currentTimer = null
 
               gameState.messages.push({
                 id: `system-${Date.now()}`,
@@ -654,6 +663,8 @@ export async function POST(request: NextRequest) {
           gameState.phase = "game-over"
           gameState.winner = null
           gameState.timer = null
+          gameState.timerStart = null
+          gameState.currentTimer = null
 
           gameState.messages.push({
             id: `system-${Date.now()}`,
